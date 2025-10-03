@@ -116,26 +116,28 @@ class EzvizEnhancedCamera(Camera):
         """Return the source of the stream."""
         _LOGGER.error(f"🔴 EZVIZ Enhanced: Demande de source de stream pour {self.serial}")
         
-        # Prioritize HLS URL as it works directly with Home Assistant
+        # TOUJOURS rafraîchir l'URL depuis le coordinator car les URLs HLS expirent
+        _LOGGER.error(f"🔴 EZVIZ Enhanced: Rafraîchissement de l'URL HLS...")
+        stream_url = await self.coordinator.async_get_stream_url(self.serial, force_refresh=True)
+        
+        if stream_url:
+            self._hls_url = stream_url
+            self._stream_url = stream_url
+            _LOGGER.error(f"🔴 EZVIZ Enhanced: URL HLS rafraîchie: {stream_url[:100]}...")
+            return stream_url
+        
+        # Fallback sur les URLs stockées si le rafraîchissement échoue
         if self._hls_url:
-            _LOGGER.error(f"🔴 EZVIZ Enhanced: Utilisation HLS URL: {self._hls_url[:100]}...")
+            _LOGGER.error(f"🔴 EZVIZ Enhanced: Utilisation HLS URL existante: {self._hls_url[:100]}...")
             return self._hls_url
         
         if self._stream_url:
-            _LOGGER.error(f"🔴 EZVIZ Enhanced: Utilisation stream URL: {self._stream_url[:100]}...")
+            _LOGGER.error(f"🔴 EZVIZ Enhanced: Utilisation stream URL existante: {self._stream_url[:100]}...")
             return self._stream_url
         
         if self._rtsp_url:
             _LOGGER.error(f"🔴 EZVIZ Enhanced: Utilisation RTSP URL: {self._rtsp_url[:100]}...")
             return self._rtsp_url
-        
-        # Try to get stream URL from coordinator
-        _LOGGER.error(f"🔴 EZVIZ Enhanced: Tentative de récupération de l'URL depuis le coordinator...")
-        stream_url = await self.coordinator.async_get_stream_url(self.serial)
-        if stream_url:
-            self._stream_url = stream_url
-            _LOGGER.error(f"🔴 EZVIZ Enhanced: URL récupérée: {stream_url[:100]}...")
-            return stream_url
         
         _LOGGER.error(f"🔴 EZVIZ Enhanced: Aucune source de stream trouvée pour {self.serial}")
         return None
