@@ -1,4 +1,5 @@
 """Camera platform for EZVIZ Enhanced integration."""
+import asyncio
 import logging
 from typing import Optional
 
@@ -107,11 +108,50 @@ class EzvizEnhancedCamera(Camera):
         self, width: Optional[int] = None, height: Optional[int] = None
     ) -> Optional[bytes]:
         """Return bytes of camera image."""
-        _LOGGER.error(f"🔴 EZVIZ Enhanced: Demande d'image pour {self.serial}")
+        _LOGGER.error(f"🔴 EZVIZ Enhanced: Demande d'image miniature pour {self.serial}")
         
-        # Pour l'instant, retourner None pour forcer l'utilisation du stream
-        # Home Assistant va utiliser le stream_source() pour afficher la caméra
-        return None
+        # Obtenir l'URL du stream
+        stream_url = await self.stream_source()
+        
+        if not stream_url:
+            _LOGGER.error(f"🔴 EZVIZ Enhanced: Pas d'URL pour générer la miniature de {self.serial}")
+            return None
+        
+        try:
+            # Utiliser FFmpeg pour extraire une image du stream HLS
+            ffmpeg_cmd = [
+                "ffmpeg",
+                "-i", stream_url,
+                "-frames:v", "1",  # Une seule frame
+                "-f", "image2",
+                "-c:v", "mjpeg",
+                "-q:v", "2",  # Qualité (2-31, 2 = meilleure)
+                "pipe:1"
+            ]
+            
+            _LOGGER.error(f"🔴 EZVIZ Enhanced: Génération de la miniature avec FFmpeg...")
+            
+            process = await asyncio.create_subprocess_exec(
+                *ffmpeg_cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=10)
+            
+            if process.returncode == 0 and stdout:
+                _LOGGER.error(f"🔴 EZVIZ Enhanced: Miniature générée avec succès ({len(stdout)} bytes)")
+                return stdout
+            else:
+                _LOGGER.error(f"🔴 EZVIZ Enhanced: Échec FFmpeg: {stderr.decode()[:200]}")
+                return None
+                
+        except asyncio.TimeoutError:
+            _LOGGER.error(f"🔴 EZVIZ Enhanced: Timeout lors de la génération de la miniature")
+            return None
+        except Exception as e:
+            _LOGGER.error(f"🔴 EZVIZ Enhanced: Erreur lors de la génération de la miniature: {e}")
+            return None
 
     async def stream_source(self) -> Optional[str]:
         """Return the source of the stream."""
