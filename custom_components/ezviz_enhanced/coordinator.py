@@ -1,7 +1,9 @@
 """Data update coordinator for EZVIZ Enhanced integration."""
 import logging
-from datetime import timedelta
+import re
+from datetime import timedelta, datetime
 from typing import Dict, List, Any, Optional
+from urllib.parse import urlparse, parse_qs
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -12,7 +14,7 @@ from .go2rtc_manager import Go2RtcManager
 
 _LOGGER = logging.getLogger(__name__)
 
-UPDATE_INTERVAL = timedelta(seconds=30)
+UPDATE_INTERVAL = timedelta(minutes=1)  # Vérification légère toutes les 1 minute
 
 
 class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
@@ -43,6 +45,7 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
         self.cameras: Dict[str, Dict[str, Any]] = {}
         self.stream_urls: Dict[str, str] = {}
         self.rtsp_urls: Dict[str, str] = {}  # URLs RTSP locales via go2rtc
+        self.url_expiration: Dict[str, int] = {}  # Stocke les timestamps d'expiration
 
         super().__init__(
             hass,
@@ -50,6 +53,33 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
             name=DOMAIN,
             update_interval=UPDATE_INTERVAL,
         )
+    
+    def _extract_expiration_from_url(self, url: str) -> Optional[int]:
+        """Extraire le timestamp d'expiration de l'URL HLS."""
+        try:
+            parsed = urlparse(url)
+            params = parse_qs(parsed.query)
+            if 'expire' in params:
+                return int(params['expire'][0])
+        except Exception as e:
+            _LOGGER.debug(f"Impossible d'extraire l'expiration de l'URL: {e}")
+        return None
+    
+    def _is_url_expired(self, serial: str, buffer_seconds: int = 300) -> bool:
+        """Vérifier si l'URL est expirée ou proche de l'expiration (5 min de marge)."""
+        if serial not in self.url_expiration:
+            return True
+        
+        expiration = self.url_expiration[serial]
+        now = int(datetime.now().timestamp())
+        
+        # Considérer comme expiré si moins de 5 minutes restantes
+        if expiration - now < buffer_seconds:
+            _LOGGER.error(f"🔴 URL pour {serial} expire dans {expiration - now}s, rafraîchissement nécessaire")
+            return True
+        
+        _LOGGER.debug(f"URL pour {serial} encore valide pour {expiration - now}s")
+        return False
 
     async def _async_update_data(self) -> Dict[str, Any]:
         """Update data via library."""
@@ -77,33 +107,45 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
                 
                 # Get stream information from EZVIZ Open Platform if enabled
                 if self.use_ieuopen and self.ezviz_open_api:
-                    stream_info = await self.ezviz_open_api.async_get_stream_info(serial, channel)
-                    if stream_info:
-                        camera_data.update(stream_info)
-                        
-                        # Get the best available stream URL
-                        stream_url = None
-                        stream_type = stream_info.get("stream_type", "hls_fluent")
-                        
-                        if stream_info.get("hls_url"):
-                            stream_url = stream_info["hls_url"]
-                        elif stream_info.get("flv_url"):
-                            stream_url = stream_info["flv_url"]
-                        elif stream_info.get("cloud_url"):
-                            stream_url = stream_info["cloud_url"]
-                        
-                        if stream_url:
-                            # For HLS streams, use direct URL (Home Assistant can handle it)
-                            if stream_type.startswith("hls"):
-                                camera_data["stream_url"] = stream_url
-                                self.stream_urls[serial] = stream_url
+                    # Vérifier si l'URL actuelle est encore valide
+                    need_refresh = self._is_url_expired(serial)
+                    
+                    if need_refresh:
+                        _LOGGER.error(f"🔴 Rafraîchissement de l'URL pour {serial} (expirée ou inexistante)")
+                        stream_info = await self.ezviz_open_api.async_get_stream_info(serial, channel)
+                        if stream_info:
+                            camera_data.update(stream_info)
+                            
+                            # Get the best available stream URL
+                            stream_url = None
+                            stream_type = stream_info.get("stream_type", "hls_fluent")
+                            
+                            if stream_info.get("hls_url"):
+                                stream_url = stream_info["hls_url"]
+                            elif stream_info.get("flv_url"):
+                                stream_url = stream_info["flv_url"]
+                            elif stream_info.get("cloud_url"):
+                                stream_url = stream_info["cloud_url"]
+                            
+                            if stream_url:
+                                # Extraire et stocker la date d'expiration
+                                expiration = self._extract_expiration_from_url(stream_url)
+                                if expiration:
+                                    self.url_expiration[serial] = expiration
+                                    remaining = expiration - int(datetime.now().timestamp())
+                                    _LOGGER.error(f"✅ Nouvelle URL pour {serial}, valide pour {remaining}s (~{remaining//60} min)")
                                 
-                                # Mettre à jour go2rtc configuration automatiquement
-                                if self.go2rtc_manager.is_available:
-                                    rtsp_url = await self.go2rtc_manager.async_add_stream(serial, stream_url)
-                                    if rtsp_url:
-                                        camera_data["rtsp_local_url"] = rtsp_url
-                                        self.rtsp_urls[serial] = rtsp_url
+                                # For HLS streams, use direct URL (Home Assistant can handle it)
+                                if stream_type.startswith("hls"):
+                                    camera_data["stream_url"] = stream_url
+                                    self.stream_urls[serial] = stream_url
+                                    
+                                    # Mettre à jour go2rtc configuration automatiquement
+                                    if self.go2rtc_manager.is_available:
+                                        rtsp_url = await self.go2rtc_manager.async_add_stream(serial, stream_url)
+                                        if rtsp_url:
+                                            camera_data["rtsp_local_url"] = rtsp_url
+                                            self.rtsp_urls[serial] = rtsp_url
                             else:
                                 # For other formats, convert to RTSP
                                 rtsp_url = await self.stream_converter.start_rtsp_conversion(
@@ -111,6 +153,13 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
                                 )
                                 camera_data["stream_url"] = rtsp_url
                                 self.stream_urls[serial] = rtsp_url
+                    else:
+                        # URL encore valide, utiliser le cache
+                        if serial in self.stream_urls:
+                            camera_data["stream_url"] = self.stream_urls[serial]
+                            camera_data["hls_url"] = self.stream_urls[serial]
+                        if serial in self.rtsp_urls:
+                            camera_data["rtsp_local_url"] = self.rtsp_urls[serial]
                 
                 # Add EZVIZ Open Platform URL
                 if self.ezviz_open_api:
