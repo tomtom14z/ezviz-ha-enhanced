@@ -60,7 +60,7 @@ class EzvizEnhancedCamera(Camera):
     @property
     def unique_id(self) -> str:
         """Return a unique ID."""
-        return f"ezviz_enhanced_{self.serial}_{self._channel}"
+        return f"{DOMAIN}_camera_{self.serial}_{self._channel}"
 
     @property
     def device_info(self):

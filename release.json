@@ -1,0 +1,7 @@
+{
+  "tag_name": "v1.0.1",
+  "name": "EZVIZ Enhanced v1.0.1",
+  "body": "## 🐛 Corrections\n\n- Ajout des modules manquants : binary_sensor, sensor, switch\n- Correction de l'erreur ModuleNotFoundError\n- Amélioration de la compatibilité HACS\n\n## 📋 Changements\n\n- ✅ Ajout de binary_sensor.py\n- ✅ Ajout de sensor.py  \n- ✅ Ajout de switch.py\n- ✅ Mise à jour du manifest.json\n\n## 🚀 Installation\n\nMettez à jour via HACS ou redémarrez Home Assistant après la mise à jour.",
+  "draft": false,
+  "prerelease": false
+}

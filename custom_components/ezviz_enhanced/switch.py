@@ -39,7 +39,7 @@ class EzvizEnhancedSwitch(SwitchEntity):
         self.coordinator = coordinator
         self.serial = serial
         self._attr_name = f"EZVIZ {serial} Stream"
-        self._attr_unique_id = f"ezviz_enhanced_{serial}_stream"
+        self._attr_unique_id = f"{DOMAIN}_switch_{serial}_stream"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, serial)},
             "name": f"EZVIZ Camera {serial}",
