@@ -26,7 +26,7 @@ async def async_setup_entry(
     # Add sensors for each camera
     for serial, camera_data in coordinator.cameras.items():
         if camera_data.get("enabled", True):
-            entities.append(EzvizEnhancedSensor(coordinator, serial))
+            entities.append(EzvizEnhancedSensor(coordinator, serial, config_entry.entry_id))
 
     async_add_entities(entities)
 
@@ -34,12 +34,13 @@ async def async_setup_entry(
 class EzvizEnhancedSensor(SensorEntity):
     """Representation of an EZVIZ Enhanced sensor."""
 
-    def __init__(self, coordinator: EzvizDataUpdateCoordinator, serial: str) -> None:
+    def __init__(self, coordinator: EzvizDataUpdateCoordinator, serial: str, entry_id: str) -> None:
         """Initialize the sensor."""
         self.coordinator = coordinator
         self.serial = serial
+        self.entry_id = entry_id
         self._attr_name = f"EZVIZ {serial} Stream Info"
-        self._attr_unique_id = f"{DOMAIN}_sensor_{serial}_stream_info"
+        self._attr_unique_id = f"{DOMAIN}_sensor_{serial}_stream_info_{entry_id[:8]}"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, serial)},
             "name": f"EZVIZ Camera {serial}",

@@ -26,7 +26,7 @@ async def async_setup_entry(
     cameras = []
     for serial, camera_data in coordinator.data.get("cameras", {}).items():
         if camera_data.get("enabled", True):
-            cameras.append(EzvizEnhancedCamera(coordinator, serial, camera_data))
+            cameras.append(EzvizEnhancedCamera(coordinator, serial, camera_data, config_entry.entry_id))
 
     async_add_entities(cameras, True)
 
@@ -39,12 +39,14 @@ class EzvizEnhancedCamera(Camera):
         coordinator: EzvizDataUpdateCoordinator,
         serial: str,
         camera_data: dict,
+        entry_id: str,
     ):
         """Initialize the camera."""
         super().__init__()
         self.coordinator = coordinator
         self.serial = serial
         self.camera_data = camera_data
+        self.entry_id = entry_id
         self._name = camera_data.get("name", f"EZVIZ {serial}")
         self._channel = camera_data.get("channel", 1)
         self._device_type = camera_data.get("device_type", "camera")
@@ -62,7 +64,7 @@ class EzvizEnhancedCamera(Camera):
     @property
     def unique_id(self) -> str:
         """Return a unique ID."""
-        return f"{DOMAIN}_camera_{self.serial}_{self._channel}"
+        return f"{DOMAIN}_camera_{self.serial}_{self._channel}_{self.entry_id[:8]}"
 
     @property
     def device_info(self):

@@ -26,7 +26,7 @@ async def async_setup_entry(
     # Add binary sensors for each camera
     for serial, camera_data in coordinator.cameras.items():
         if camera_data.get("enabled", True):
-            entities.append(EzvizEnhancedBinarySensor(coordinator, serial))
+            entities.append(EzvizEnhancedBinarySensor(coordinator, serial, config_entry.entry_id))
 
     async_add_entities(entities)
 
@@ -34,12 +34,13 @@ async def async_setup_entry(
 class EzvizEnhancedBinarySensor(BinarySensorEntity):
     """Representation of an EZVIZ Enhanced binary sensor."""
 
-    def __init__(self, coordinator: EzvizDataUpdateCoordinator, serial: str) -> None:
+    def __init__(self, coordinator: EzvizDataUpdateCoordinator, serial: str, entry_id: str) -> None:
         """Initialize the binary sensor."""
         self.coordinator = coordinator
         self.serial = serial
+        self.entry_id = entry_id
         self._attr_name = f"EZVIZ {serial} Online"
-        self._attr_unique_id = f"{DOMAIN}_binary_sensor_{serial}_online"
+        self._attr_unique_id = f"{DOMAIN}_binary_sensor_{serial}_online_{entry_id[:8]}"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, serial)},
             "name": f"EZVIZ Camera {serial}",
