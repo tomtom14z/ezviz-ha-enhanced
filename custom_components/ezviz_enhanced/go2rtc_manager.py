@@ -2,8 +2,8 @@
 import logging
 from typing import Optional, Dict
 import os
-import yaml
 import aiohttp
+from homeassistant.util import yaml as ha_yaml
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,35 +27,27 @@ class Go2RtcManager:
         rtsp_url = f"rtsp://localhost:8554/{stream_name}"
         
         try:
-            # Déterminer quel fichier utiliser
-            # Si go2rtc.yaml existe, l'utiliser, sinon utiliser configuration.yaml
-            config_file_to_use = self._go2rtc_config_file if os.path.exists(self._go2rtc_config_file) else self._config_file
+            # Toujours utiliser go2rtc.yaml pour éviter les problèmes avec !include
+            config_file_to_use = self._go2rtc_config_file
             
             _LOGGER.error(f"🔴 EZVIZ Enhanced: Utilisation du fichier: {config_file_to_use}")
             
+            # Utiliser aiofiles pour lecture asynchrone
+            import aiofiles
+            
             if not os.path.exists(config_file_to_use):
-                # Créer go2rtc.yaml si aucun fichier n'existe
-                config_file_to_use = self._go2rtc_config_file
+                # Créer go2rtc.yaml
                 config = {'streams': {}}
                 _LOGGER.error(f"🔴 EZVIZ Enhanced: Création de {config_file_to_use}")
             else:
-                with open(config_file_to_use, 'r', encoding='utf-8') as f:
-                    config = yaml.safe_load(f) or {}
+                async with aiofiles.open(config_file_to_use, 'r', encoding='utf-8') as f:
+                    content = await f.read()
+                    config = ha_yaml.parse_yaml(content) or {}
             
-            # Si c'est configuration.yaml, on doit wrapper dans go2rtc:
-            # Si c'est go2rtc.yaml, les streams sont à la racine
-            if config_file_to_use == self._config_file:
-                # configuration.yaml
-                if 'go2rtc' not in config:
-                    config['go2rtc'] = {}
-                if 'streams' not in config['go2rtc']:
-                    config['go2rtc']['streams'] = {}
-                streams_dict = config['go2rtc']['streams']
-            else:
-                # go2rtc.yaml
-                if 'streams' not in config:
-                    config['streams'] = {}
-                streams_dict = config['streams']
+            # go2rtc.yaml : les streams sont à la racine
+            if 'streams' not in config:
+                config['streams'] = {}
+            streams_dict = config['streams']
             
             # Ajouter ou mettre à jour le stream
             old_url = streams_dict.get(stream_name)
@@ -65,9 +57,12 @@ class Go2RtcManager:
             
             streams_dict[stream_name] = [hls_url]
             
-            # Écrire la configuration mise à jour
-            with open(config_file_to_use, 'w', encoding='utf-8') as f:
-                yaml.dump(config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+            # Écrire la configuration mise à jour de façon asynchrone
+            import yaml as pyyaml
+            yaml_content = pyyaml.dump(config, default_flow_style=False, allow_unicode=True, sort_keys=False)
+            
+            async with aiofiles.open(config_file_to_use, 'w', encoding='utf-8') as f:
+                await f.write(yaml_content)
             
             if old_url != hls_url:
                 _LOGGER.error("=" * 80)
@@ -131,20 +126,26 @@ class Go2RtcManager:
     async def async_remove_stream(self, serial: str) -> bool:
         """Remove a stream from go2rtc configuration."""
         stream_name = f"ezviz_{serial}"
+        config_file_to_use = self._go2rtc_config_file
         
         try:
-            if not os.path.exists(self._config_file):
+            import aiofiles
+            import yaml as pyyaml
+            
+            if not os.path.exists(config_file_to_use):
                 return True
             
-            with open(self._config_file, 'r', encoding='utf-8') as f:
-                config = yaml.safe_load(f) or {}
+            async with aiofiles.open(config_file_to_use, 'r', encoding='utf-8') as f:
+                content = await f.read()
+                config = ha_yaml.parse_yaml(content) or {}
             
-            if 'go2rtc' in config and 'streams' in config['go2rtc']:
-                if stream_name in config['go2rtc']['streams']:
-                    del config['go2rtc']['streams'][stream_name]
+            if 'streams' in config:
+                if stream_name in config['streams']:
+                    del config['streams'][stream_name]
                     
-                    with open(self._config_file, 'w', encoding='utf-8') as f:
-                        yaml.dump(config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+                    yaml_content = pyyaml.dump(config, default_flow_style=False, allow_unicode=True, sort_keys=False)
+                    async with aiofiles.open(config_file_to_use, 'w', encoding='utf-8') as f:
+                        await f.write(yaml_content)
                     
                     _LOGGER.error(f"🔴 EZVIZ Enhanced: Stream go2rtc supprimé pour {serial}")
             
