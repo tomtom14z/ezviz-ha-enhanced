@@ -1,0 +1,21 @@
+# Configuration example for EZVIZ Enhanced camera
+# Add this to your configuration.yaml or create a separate file
+
+camera:
+  - platform: generic
+    name: "EZVIZ Camera Stream"
+    stream_source: "{{ states.camera.oeilcp2.attributes.hls_url }}"
+    still_image_url: "{{ states.camera.oeilcp2.attributes.hls_url }}"
+    verify_ssl: false
+
+# Alternative: Use FFmpeg to convert HLS to RTSP
+ffmpeg:
+  ffmpeg_bin: /usr/bin/ffmpeg
+
+# If you want to use the generic camera platform
+# Uncomment and modify the following:
+# camera:
+#   - platform: generic
+#     name: "EZVIZ HLS Stream"
+#     stream_source: "{{ state_attr('camera.oeilcp2', 'hls_url') }}"
+#     verify_ssl: false

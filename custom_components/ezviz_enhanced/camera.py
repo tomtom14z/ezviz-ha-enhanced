@@ -55,6 +55,7 @@ class EzvizEnhancedCamera(Camera):
         self._stream_url = camera_data.get("stream_url")
         self._ieuopen_url = camera_data.get("ieuopen_url")
         self._stream_source = None
+        self._ffmpeg_process = None
 
     @property
     def name(self) -> str:
@@ -93,47 +94,14 @@ class EzvizEnhancedCamera(Camera):
         self, width: Optional[int] = None, height: Optional[int] = None
     ) -> Optional[bytes]:
         """Return bytes of camera image."""
-        # Try to get image from HLS stream first
-        if self._hls_url:
-            try:
-                # For HLS streams, we need to extract a frame
-                # This is a simplified approach - in production you might want to use ffmpeg
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(self._hls_url, timeout=aiohttp.ClientTimeout(total=10)) as response:
-                        if response.status == 200:
-                            # For now, return None to let Home Assistant handle the stream
-                            # The stream_source method will provide the HLS URL for live viewing
-                            return None
-            except Exception as e:
-                _LOGGER.error(f"Error getting camera image from HLS: {e}")
-        
-        # Try to get image from stream URL
-        if self._stream_url:
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(self._stream_url, timeout=aiohttp.ClientTimeout(total=10)) as response:
-                        if response.status == 200:
-                            return None  # Let Home Assistant handle the stream
-            except Exception as e:
-                _LOGGER.error(f"Error getting camera image from stream: {e}")
-        
-        # Try to get image from IeuOpen platform
-        if self._ieuopen_url:
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(self._ieuopen_url, timeout=aiohttp.ClientTimeout(total=10)) as response:
-                        if response.status == 200:
-                            return None  # Let Home Assistant handle the stream
-            except Exception as e:
-                _LOGGER.error(f"Error getting camera image from IeuOpen: {e}")
-        
-        # If no stream is available, return None to show "inactive" state
-        _LOGGER.warning(f"No valid stream URL available for camera {self.serial}")
+        # For HLS streams, we'll let Home Assistant handle the stream
+        # The stream_source method will provide the HLS URL
         return None
 
     async def stream_source(self) -> Optional[str]:
         """Return the source of the stream."""
-        # Prioritize HLS URL as it works directly with Home Assistant
+        # For HLS streams, return the URL directly
+        # Home Assistant should be able to handle HLS with FFmpeg
         if self._hls_url:
             _LOGGER.error(f"🔴 EZVIZ Enhanced: Using HLS stream for camera {self.serial}: {self._hls_url}")
             return self._hls_url
