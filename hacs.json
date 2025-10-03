@@ -1,0 +1,9 @@
+{
+  "name": "EZVIZ Enhanced",
+  "content_in_root": false,
+  "filename": "ezviz_enhanced",
+  "country": ["FR", "US", "GB", "DE", "ES", "IT"],
+  "homeassistant": "2023.1.0",
+  "render_readme": true,
+  "iot_class": "Cloud Polling"
+}

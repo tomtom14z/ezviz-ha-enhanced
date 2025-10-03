@@ -1,11 +1,10 @@
 {
   "domain": "ezviz_enhanced",
   "name": "EZVIZ Enhanced",
-  "documentation": "https://github.com/votre-username/ha-ezviz-enhanced",
+  "documentation": "https://github.com/tomtom14z/ezviz-ha-enhanced",
   "dependencies": ["ffmpeg"],
-  "codeowners": ["@votre-username"],
+  "codeowners": ["@tomtom14z"],
   "requirements": [
-    "pyEzvizApi==0.2.0.4",
     "aiohttp>=3.8.0",
     "requests>=2.25.0"
   ],
