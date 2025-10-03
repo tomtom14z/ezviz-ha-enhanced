@@ -42,7 +42,8 @@ class Go2RtcManager:
             else:
                 async with aiofiles.open(config_file_to_use, 'r', encoding='utf-8') as f:
                     content = await f.read()
-                    config = ha_yaml.parse_yaml(content) or {}
+                    # Utiliser pyyaml directement pour éviter les métadonnées HA
+                    config = pyyaml.safe_load(content) or {}
             
             # go2rtc.yaml : les streams sont à la racine
             if 'streams' not in config:
@@ -98,8 +99,7 @@ class Go2RtcManager:
             await self.hass.services.async_call(
                 "go2rtc",
                 "reload",
-                blocking=True,
-                limit=10
+                blocking=True
             )
             return True
         except Exception as e:
@@ -137,7 +137,7 @@ class Go2RtcManager:
             
             async with aiofiles.open(config_file_to_use, 'r', encoding='utf-8') as f:
                 content = await f.read()
-                config = ha_yaml.parse_yaml(content) or {}
+                config = pyyaml.safe_load(content) or {}
             
             if 'streams' in config:
                 if stream_name in config['streams']:
