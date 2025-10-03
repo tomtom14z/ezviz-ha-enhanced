@@ -3,7 +3,6 @@ import logging
 from typing import Optional
 
 from homeassistant.components.camera import Camera, CameraEntityFeature
-from homeassistant.components.ffmpeg import FFmpegManager
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -21,14 +20,11 @@ async def async_setup_entry(
 ) -> None:
     """Set up EZVIZ Enhanced camera entities."""
     coordinator: EzvizDataUpdateCoordinator = hass.data[DOMAIN][config_entry.entry_id]
-    
-    # Get FFmpeg manager
-    ffmpeg_manager = FFmpegManager(hass)
 
     cameras = []
     for serial, camera_data in coordinator.data.get("cameras", {}).items():
         if camera_data.get("enabled", True):
-            cameras.append(EzvizEnhancedCamera(coordinator, config_entry, serial, camera_data, ffmpeg_manager))
+            cameras.append(EzvizEnhancedCamera(coordinator, config_entry, serial, camera_data))
 
     async_add_entities(cameras, True)
 
@@ -46,7 +42,6 @@ class EzvizEnhancedCamera(Camera):
         config_entry: ConfigEntry,
         serial: str,
         camera_data: dict,
-        ffmpeg_manager: FFmpegManager,
     ):
         """Initialize the camera."""
         super().__init__()
@@ -54,7 +49,6 @@ class EzvizEnhancedCamera(Camera):
         self.config_entry = config_entry
         self.serial = serial
         self.camera_data = camera_data
-        self._ffmpeg_manager = ffmpeg_manager
         self._name = camera_data.get("name", f"EZVIZ {serial}")
         self._channel = camera_data.get("channel", 1)
         self._device_type = camera_data.get("device_type", "camera")
