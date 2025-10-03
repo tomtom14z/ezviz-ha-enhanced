@@ -8,7 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, ATTR_SERIAL, ATTR_CHANNEL, ATTR_DEVICE_TYPE, ATTR_RTSP_URL, ATTR_IEUOPEN_URL, ATTR_HLS_URL
+from .const import DOMAIN, ATTR_SERIAL, ATTR_CHANNEL, ATTR_DEVICE_TYPE, ATTR_RTSP_URL, ATTR_IEUOPEN_URL, ATTR_HLS_URL, ATTR_RTSP_LOCAL_URL
 from .coordinator import EzvizDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -57,9 +57,10 @@ class EzvizEnhancedCamera(Camera):
         self._hls_url = camera_data.get("hls_url")
         self._stream_url = camera_data.get("stream_url")
         self._ieuopen_url = camera_data.get("ieuopen_url")
+        self._rtsp_local_url = camera_data.get("rtsp_local_url")
         self._last_url = None
         
-        _LOGGER.error(f"🔴 EZVIZ Enhanced Camera initialisée: {self._name}, HLS: {bool(self._hls_url)}")
+        _LOGGER.error(f"🔴 EZVIZ Enhanced Camera initialisée: {self._name}, HLS: {bool(self._hls_url)}, RTSP Local: {bool(self._rtsp_local_url)}")
 
     @property
     def name(self) -> str:
@@ -90,7 +91,7 @@ class EzvizEnhancedCamera(Camera):
     @property
     def extra_state_attributes(self):
         """Return extra state attributes."""
-        return {
+        attrs = {
             ATTR_SERIAL: self.serial,
             ATTR_CHANNEL: self._channel,
             ATTR_DEVICE_TYPE: self._device_type,
@@ -98,6 +99,12 @@ class EzvizEnhancedCamera(Camera):
             ATTR_HLS_URL: self._hls_url,
             ATTR_IEUOPEN_URL: self._ieuopen_url,
         }
+        
+        # Ajouter l'URL RTSP locale si disponible
+        if self._rtsp_local_url:
+            attrs[ATTR_RTSP_LOCAL_URL] = self._rtsp_local_url
+        
+        return attrs
 
     @property
     def is_streaming(self) -> bool:
@@ -206,6 +213,7 @@ class EzvizEnhancedCamera(Camera):
             self._hls_url = camera_data.get("hls_url")
             self._stream_url = camera_data.get("stream_url")
             self._ieuopen_url = camera_data.get("ieuopen_url")
+            self._rtsp_local_url = camera_data.get("rtsp_local_url")
             
             if self._hls_url != old_hls:
                 _LOGGER.error(f"🔴 EZVIZ Enhanced: URL HLS mise à jour pour {self.serial}: {bool(self._hls_url)}")

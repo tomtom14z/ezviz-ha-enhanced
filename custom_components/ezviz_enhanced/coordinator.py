@@ -8,6 +8,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import EzvizApi, EzvizOpenApi, StreamConverter
 from .const import DOMAIN, CONF_USE_IEUOPEN, CONF_RTSP_PORT, CONF_CAMERAS
+from .go2rtc_manager import Go2RtcManager
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,9 +36,13 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
         # Initialize stream converter
         self.stream_converter = StreamConverter(self.rtsp_port)
         
+        # Initialize go2rtc manager for local RTSP streams
+        self.go2rtc_manager = Go2RtcManager(hass)
+        
         # Store camera data
         self.cameras: Dict[str, Dict[str, Any]] = {}
         self.stream_urls: Dict[str, str] = {}
+        self.rtsp_urls: Dict[str, str] = {}  # URLs RTSP locales via go2rtc
 
         super().__init__(
             hass,
@@ -92,6 +97,13 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
                             if stream_type.startswith("hls"):
                                 camera_data["stream_url"] = stream_url
                                 self.stream_urls[serial] = stream_url
+                                
+                                # Mettre à jour go2rtc configuration automatiquement
+                                if self.go2rtc_manager.is_available:
+                                    rtsp_url = await self.go2rtc_manager.async_add_stream(serial, stream_url)
+                                    if rtsp_url:
+                                        camera_data["rtsp_local_url"] = rtsp_url
+                                        self.rtsp_urls[serial] = rtsp_url
                             else:
                                 # For other formats, convert to RTSP
                                 rtsp_url = await self.stream_converter.start_rtsp_conversion(
@@ -109,6 +121,7 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
             return {
                 "cameras": self.cameras,
                 "stream_urls": self.stream_urls,
+                "rtsp_urls": self.rtsp_urls,
                 "ezviz_devices": ezviz_devices,
             }
             
