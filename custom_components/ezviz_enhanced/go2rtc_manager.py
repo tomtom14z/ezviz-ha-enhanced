@@ -43,58 +43,35 @@ class Go2RtcManager:
                 return None
 
         stream_name = f"ezviz_{serial}"
+        rtsp_url = f"rtsp://localhost:8554/{stream_name}"
         
         # go2rtc intégré à Home Assistant ne supporte pas l'ajout dynamique de streams
-        # On crée simplement l'URL RTSP qui sera disponible quand le stream sera demandé
-        # go2rtc va automatiquement proxyfier l'URL HLS source
+        # L'utilisateur doit configurer manuellement dans configuration.yaml
         
-        _LOGGER.error(f"🔴 EZVIZ Enhanced: Configuration du stream RTSP pour {serial}")
+        _LOGGER.error("=" * 80)
+        _LOGGER.error(f"🔴 EZVIZ Enhanced: go2rtc détecté - Configuration manuelle requise")
+        _LOGGER.error("=" * 80)
+        _LOGGER.error(f"")
+        _LOGGER.error(f"📋 Pour activer le flux RTSP local pour votre caméra {serial}:")
+        _LOGGER.error(f"")
+        _LOGGER.error(f"1️⃣  Ajoutez ces lignes dans votre configuration.yaml :")
+        _LOGGER.error(f"")
+        _LOGGER.error(f"go2rtc:")
+        _LOGGER.error(f"  streams:")
+        _LOGGER.error(f"    {stream_name}:")
+        _LOGGER.error(f"      - {hls_url}")
+        _LOGGER.error(f"")
+        _LOGGER.error(f"2️⃣  Redémarrez Home Assistant")
+        _LOGGER.error(f"")
+        _LOGGER.error(f"3️⃣  Utilisez cette URL dans Scrypted/Homebridge/Frigate :")
+        _LOGGER.error(f"     {rtsp_url}")
+        _LOGGER.error(f"")
+        _LOGGER.error("=" * 80)
         
-        # Vérifier si go2rtc peut accéder au stream
-        try:
-            async with aiohttp.ClientSession() as session:
-                # Tester si on peut lire le stream depuis go2rtc
-                # go2rtc supporte la lecture directe d'URLs HLS comme source
-                test_url = f"{self._base_url}/api/stream.mp4?src={hls_url}"
-                
-                async with session.get(
-                    test_url,
-                    timeout=aiohttp.ClientTimeout(total=3)
-                ) as response:
-                    if response.status == 200:
-                        # go2rtc peut lire le stream, créer l'URL RTSP
-                        rtsp_url = f"rtsp://localhost:8554/{stream_name}"
-                        self._streams[serial] = rtsp_url
-                        
-                        # Stocker la source HLS pour go2rtc
-                        _LOGGER.error(f"🔴 EZVIZ Enhanced: Stream RTSP configuré pour {serial}: {rtsp_url}")
-                        _LOGGER.error(f"🔴 EZVIZ Enhanced: Pour utiliser ce stream, ajoutez dans configuration.yaml:")
-                        _LOGGER.error(f"🔴 EZVIZ Enhanced: go2rtc:")
-                        _LOGGER.error(f"🔴 EZVIZ Enhanced:   streams:")
-                        _LOGGER.error(f"🔴 EZVIZ Enhanced:     {stream_name}: {hls_url}")
-                        
-                        return rtsp_url
-                    else:
-                        _LOGGER.error(f"🔴 EZVIZ Enhanced: go2rtc ne peut pas accéder au stream HLS (status {response.status})")
-                        return None
-                        
-        except asyncio.TimeoutError:
-            _LOGGER.error(f"🔴 EZVIZ Enhanced: Timeout lors du test du stream")
-            return None
-        except Exception as e:
-            _LOGGER.error(f"🔴 EZVIZ Enhanced: Erreur lors du test du stream: {e}")
-            # Même en cas d'erreur, on retourne l'URL RTSP
-            # Elle sera disponible si l'utilisateur configure manuellement go2rtc
-            rtsp_url = f"rtsp://localhost:8554/{stream_name}"
-            self._streams[serial] = rtsp_url
-            
-            _LOGGER.error(f"🔴 EZVIZ Enhanced: ⚠️ Configuration manuelle requise")
-            _LOGGER.error(f"🔴 EZVIZ Enhanced: Ajoutez dans configuration.yaml :")
-            _LOGGER.error(f"🔴 EZVIZ Enhanced: go2rtc:")
-            _LOGGER.error(f"🔴 EZVIZ Enhanced:   streams:")
-            _LOGGER.error(f"🔴 EZVIZ Enhanced:     {stream_name}: {hls_url}")
-            
-            return rtsp_url
+        # Stocker l'URL RTSP même si elle n'est pas encore active
+        self._streams[serial] = rtsp_url
+        
+        return rtsp_url
 
     async def async_update_stream(self, serial: str, hls_url: str) -> Optional[str]:
         """Update an existing stream with a new HLS URL."""
