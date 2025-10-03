@@ -135,25 +135,25 @@ class EzvizEnhancedCamera(Camera):
         """Return the source of the stream."""
         # Prioritize HLS URL as it works directly with Home Assistant
         if self._hls_url:
-            _LOGGER.info(f"Using HLS stream for camera {self.serial}: {self._hls_url}")
+            _LOGGER.error(f"🔴 EZVIZ Enhanced: Using HLS stream for camera {self.serial}: {self._hls_url}")
             return self._hls_url
         
         if self._stream_url:
-            _LOGGER.info(f"Using stream URL for camera {self.serial}: {self._stream_url}")
+            _LOGGER.error(f"🔴 EZVIZ Enhanced: Using stream URL for camera {self.serial}: {self._stream_url}")
             return self._stream_url
         
         if self._rtsp_url:
-            _LOGGER.info(f"Using RTSP stream for camera {self.serial}: {self._rtsp_url}")
+            _LOGGER.error(f"🔴 EZVIZ Enhanced: Using RTSP stream for camera {self.serial}: {self._rtsp_url}")
             return self._rtsp_url
         
         # Try to get stream URL from coordinator
         stream_url = await self.coordinator.async_get_stream_url(self.serial)
         if stream_url:
             self._stream_url = stream_url
-            _LOGGER.info(f"Got stream URL from coordinator for camera {self.serial}: {stream_url}")
+            _LOGGER.error(f"🔴 EZVIZ Enhanced: Got stream URL from coordinator for camera {self.serial}: {stream_url}")
             return stream_url
         
-        _LOGGER.error(f"No stream source available for camera {self.serial}")
+        _LOGGER.error(f"🔴 EZVIZ Enhanced: No stream source available for camera {self.serial}")
         return None
 
     async def async_update(self):
@@ -169,8 +169,8 @@ class EzvizEnhancedCamera(Camera):
             self._stream_url = camera_data.get("stream_url")
             self._ieuopen_url = camera_data.get("ieuopen_url")
             
-            # Log current URLs for debugging
-            _LOGGER.info(f"Camera {self.serial} URLs - HLS: {self._hls_url}, Stream: {self._stream_url}, RTSP: {self._rtsp_url}")
+            # Log current URLs for debugging - using ERROR level to ensure visibility
+            _LOGGER.error(f"🔴 EZVIZ Enhanced: Camera {self.serial} URLs - HLS: {self._hls_url}, Stream: {self._stream_url}, RTSP: {self._rtsp_url}")
 
     async def async_will_remove_from_hass(self):
         """Clean up when entity is removed."""
