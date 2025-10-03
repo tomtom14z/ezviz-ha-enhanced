@@ -8,6 +8,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import EzvizApi, EzvizOpenApi, StreamConverter
 from .const import DOMAIN, CONF_USE_IEUOPEN, CONF_RTSP_PORT, CONF_CAMERAS
+from .go2rtc_manager import Go2RtcManager
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,9 +36,13 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
         # Initialize stream converter
         self.stream_converter = StreamConverter(self.rtsp_port)
         
+        # Initialize go2rtc manager for local RTSP streams
+        self.go2rtc_manager = Go2RtcManager(hass)
+        
         # Store camera data
         self.cameras: Dict[str, Dict[str, Any]] = {}
         self.stream_urls: Dict[str, str] = {}
+        self.rtsp_urls: Dict[str, str] = {}  # URLs RTSP locales via go2rtc
 
         super().__init__(
             hass,
@@ -49,6 +54,11 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> Dict[str, Any]:
         """Update data via library."""
         try:
+            # Vérifier la disponibilité de go2rtc au premier update
+            if not hasattr(self, '_go2rtc_checked'):
+                await self.go2rtc_manager.async_check_availability()
+                self._go2rtc_checked = True
+            
             # Get devices from EZVIZ cloud API
             ezviz_devices = await self.ezviz_api.async_get_devices()
             
@@ -92,6 +102,14 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
                             if stream_type.startswith("hls"):
                                 camera_data["stream_url"] = stream_url
                                 self.stream_urls[serial] = stream_url
+                                
+                                # Créer/mettre à jour le stream RTSP local via go2rtc (usage CPU minimal)
+                                if self.go2rtc_manager.is_available:
+                                    rtsp_url = await self.go2rtc_manager.async_add_stream(serial, stream_url)
+                                    if rtsp_url:
+                                        camera_data["rtsp_local_url"] = rtsp_url
+                                        self.rtsp_urls[serial] = rtsp_url
+                                        _LOGGER.error(f"🔴 EZVIZ Enhanced: RTSP local disponible pour {serial}: {rtsp_url}")
                             else:
                                 # For other formats, convert to RTSP
                                 rtsp_url = await self.stream_converter.start_rtsp_conversion(
@@ -109,6 +127,7 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
             return {
                 "cameras": self.cameras,
                 "stream_urls": self.stream_urls,
+                "rtsp_urls": self.rtsp_urls,
                 "ezviz_devices": ezviz_devices,
             }
             
@@ -162,7 +181,15 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
         for serial in list(self.stream_urls.keys()):
             await self.async_stop_rtsp_conversion(serial)
         
+        # Remove all go2rtc streams
+        for serial in list(self.rtsp_urls.keys()):
+            await self.go2rtc_manager.async_remove_stream(serial)
+        
         # Close API sessions
         await self.ezviz_api.async_close()
         if self.ezviz_open_api:
             await self.ezviz_open_api.async_close()
+    
+    def get_rtsp_local_url(self, serial: str) -> Optional[str]:
+        """Get local RTSP URL for a camera."""
+        return self.rtsp_urls.get(serial)
