@@ -68,13 +68,16 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
                     "name": name,
                     "enabled": enabled,
                     "device_type": "camera",
+                    "status": "offline",  # Default status
                 }
                 
                 # Get stream information from EZVIZ Open Platform if enabled
                 if self.use_ieuopen and self.ezviz_open_api:
+                    _LOGGER.info(f"Getting stream info for camera {serial}")
                     stream_info = await self.ezviz_open_api.async_get_stream_info(serial, channel)
                     if stream_info:
                         camera_data.update(stream_info)
+                        camera_data["status"] = "online"
                         
                         # Get the best available stream URL
                         stream_url = None
@@ -82,6 +85,7 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
                         
                         if stream_info.get("hls_url"):
                             stream_url = stream_info["hls_url"]
+                            camera_data["hls_url"] = stream_url  # Store HLS URL separately
                         elif stream_info.get("flv_url"):
                             stream_url = stream_info["flv_url"]
                         elif stream_info.get("cloud_url"):
@@ -92,6 +96,7 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
                             if stream_type.startswith("hls"):
                                 camera_data["stream_url"] = stream_url
                                 self.stream_urls[serial] = stream_url
+                                _LOGGER.info(f"Using HLS stream for {serial}: {stream_url}")
                             else:
                                 # For other formats, convert to RTSP
                                 rtsp_url = await self.stream_converter.start_rtsp_conversion(
@@ -99,12 +104,18 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
                                 )
                                 camera_data["stream_url"] = rtsp_url
                                 self.stream_urls[serial] = rtsp_url
+                                _LOGGER.info(f"Using RTSP stream for {serial}: {rtsp_url}")
+                        else:
+                            _LOGGER.warning(f"No stream URL found for camera {serial}")
+                    else:
+                        _LOGGER.warning(f"Failed to get stream info for camera {serial}")
                 
                 # Add EZVIZ Open Platform URL
                 if self.ezviz_open_api:
                     camera_data["ieuopen_url"] = self.ezviz_open_api.get_live_url(serial, channel)
                 
                 self.cameras[serial] = camera_data
+                _LOGGER.info(f"Camera {serial} configured: {camera_data}")
             
             return {
                 "cameras": self.cameras,
@@ -113,6 +124,7 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
             }
             
         except Exception as error:
+            _LOGGER.error(f"Error communicating with EZVIZ API: {error}")
             raise UpdateFailed(f"Error communicating with EZVIZ API: {error}")
 
     async def async_get_camera(self, serial: str) -> Optional[Dict[str, Any]]:

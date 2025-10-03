@@ -1,6 +1,8 @@
 """Camera platform for EZVIZ Enhanced integration."""
 import logging
 from typing import Optional
+import aiohttp
+import asyncio
 
 from homeassistant.components.camera import Camera
 from homeassistant.config_entries import ConfigEntry
@@ -89,39 +91,67 @@ class EzvizEnhancedCamera(Camera):
         self, width: Optional[int] = None, height: Optional[int] = None
     ) -> Optional[bytes]:
         """Return bytes of camera image."""
+        # Try to get image from HLS stream first
+        if self._hls_url:
+            try:
+                # For HLS streams, we need to extract a frame
+                # This is a simplified approach - in production you might want to use ffmpeg
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(self._hls_url, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                        if response.status == 200:
+                            # For now, return None to let Home Assistant handle the stream
+                            # The stream_source method will provide the HLS URL for live viewing
+                            return None
+            except Exception as e:
+                _LOGGER.error(f"Error getting camera image from HLS: {e}")
+        
+        # Try to get image from stream URL
+        if self._stream_url:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(self._stream_url, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                        if response.status == 200:
+                            return None  # Let Home Assistant handle the stream
+            except Exception as e:
+                _LOGGER.error(f"Error getting camera image from stream: {e}")
+        
         # Try to get image from IeuOpen platform
         if self._ieuopen_url:
             try:
-                import aiohttp
                 async with aiohttp.ClientSession() as session:
-                    async with session.get(self._ieuopen_url) as response:
+                    async with session.get(self._ieuopen_url, timeout=aiohttp.ClientTimeout(total=10)) as response:
                         if response.status == 200:
-                            # This would need to be adapted based on actual API response
-                            # For now, return None to use default behavior
-                            return None
+                            return None  # Let Home Assistant handle the stream
             except Exception as e:
-                _LOGGER.error(f"Error getting camera image: {e}")
+                _LOGGER.error(f"Error getting camera image from IeuOpen: {e}")
         
+        # If no stream is available, return None to show "inactive" state
+        _LOGGER.warning(f"No valid stream URL available for camera {self.serial}")
         return None
 
     async def stream_source(self) -> Optional[str]:
         """Return the source of the stream."""
         # Prioritize HLS URL as it works directly with Home Assistant
         if self._hls_url:
+            _LOGGER.info(f"Using HLS stream for camera {self.serial}: {self._hls_url}")
             return self._hls_url
         
         if self._stream_url:
+            _LOGGER.info(f"Using stream URL for camera {self.serial}: {self._stream_url}")
             return self._stream_url
         
         if self._rtsp_url:
+            _LOGGER.info(f"Using RTSP stream for camera {self.serial}: {self._rtsp_url}")
             return self._rtsp_url
         
         # Try to get stream URL from coordinator
         stream_url = await self.coordinator.async_get_stream_url(self.serial)
         if stream_url:
             self._stream_url = stream_url
+            _LOGGER.info(f"Got stream URL from coordinator for camera {self.serial}: {stream_url}")
             return stream_url
         
+        _LOGGER.error(f"No stream source available for camera {self.serial}")
         return None
 
     async def async_update(self):
@@ -136,6 +166,9 @@ class EzvizEnhancedCamera(Camera):
             self._hls_url = camera_data.get("hls_url")
             self._stream_url = camera_data.get("stream_url")
             self._ieuopen_url = camera_data.get("ieuopen_url")
+            
+            # Log current URLs for debugging
+            _LOGGER.info(f"Camera {self.serial} URLs - HLS: {self._hls_url}, Stream: {self._stream_url}, RTSP: {self._rtsp_url}")
 
     async def async_will_remove_from_hass(self):
         """Clean up when entity is removed."""
