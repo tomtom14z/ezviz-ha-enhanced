@@ -42,17 +42,18 @@ class Go2RtcManager:
         stream_name = f"ezviz_{serial}"
         
         try:
-            # Configuration du stream pour go2rtc
+            # Utiliser l'API Home Assistant go2rtc pour ajouter le stream
             # go2rtc fait du stream copy (pas de réencodage) donc usage CPU minimal
-            stream_config = {
-                stream_name: [hls_url]
-            }
-            
             async with aiohttp.ClientSession() as session:
-                # Ajouter ou mettre à jour le stream
-                async with session.patch(
-                    f"{self._base_url}/api/config",
-                    json={"streams": stream_config},
+                # Méthode 1: Utiliser l'API streams directement
+                stream_data = {
+                    "name": stream_name,
+                    "url": hls_url
+                }
+                
+                async with session.post(
+                    f"{self._base_url}/api/streams",
+                    json=stream_data,
                     timeout=aiohttp.ClientTimeout(total=5)
                 ) as response:
                     if response.status in [200, 201]:
@@ -60,9 +61,33 @@ class Go2RtcManager:
                         self._streams[serial] = rtsp_url
                         _LOGGER.error(f"🔴 EZVIZ Enhanced: Stream RTSP créé pour {serial}: {rtsp_url}")
                         return rtsp_url
+                    elif response.status == 409:
+                        # Stream existe déjà, mettre à jour
+                        _LOGGER.error(f"🔴 EZVIZ Enhanced: Stream existe déjà, utilisation du stream existant pour {serial}")
+                        rtsp_url = f"rtsp://localhost:8554/{stream_name}"
+                        self._streams[serial] = rtsp_url
+                        return rtsp_url
                     else:
-                        _LOGGER.error(f"🔴 EZVIZ Enhanced: Échec de création du stream RTSP pour {serial}: {response.status}")
-                        return None
+                        error_text = await response.text()
+                        _LOGGER.error(f"🔴 EZVIZ Enhanced: Échec de création du stream RTSP pour {serial}: {response.status} - {error_text}")
+                        
+                        # Méthode 2: Essayer avec l'approche configuration YAML
+                        _LOGGER.error(f"🔴 EZVIZ Enhanced: Tentative de création via service Home Assistant...")
+                        try:
+                            # Utiliser le service Home Assistant pour ajouter le stream
+                            await self.hass.services.async_call(
+                                "go2rtc",
+                                "add_stream",
+                                {"entity_id": stream_name, "url": hls_url},
+                                blocking=True
+                            )
+                            rtsp_url = f"rtsp://localhost:8554/{stream_name}"
+                            self._streams[serial] = rtsp_url
+                            _LOGGER.error(f"🔴 EZVIZ Enhanced: Stream RTSP créé via service HA pour {serial}: {rtsp_url}")
+                            return rtsp_url
+                        except Exception as service_error:
+                            _LOGGER.error(f"🔴 EZVIZ Enhanced: Échec service HA: {service_error}")
+                            return None
                         
         except Exception as e:
             _LOGGER.error(f"🔴 EZVIZ Enhanced: Erreur lors de la création du stream RTSP pour {serial}: {e}")
