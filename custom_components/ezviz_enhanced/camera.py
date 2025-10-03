@@ -1,10 +1,8 @@
 """Camera platform for EZVIZ Enhanced integration."""
 import logging
 from typing import Optional
-import aiohttp
-import asyncio
 
-from homeassistant.components.camera import Camera
+from homeassistant.components.camera import Camera, CameraEntityFeature, SUPPORT_STREAM
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -26,27 +24,30 @@ async def async_setup_entry(
     cameras = []
     for serial, camera_data in coordinator.data.get("cameras", {}).items():
         if camera_data.get("enabled", True):
-            cameras.append(EzvizEnhancedCamera(coordinator, serial, camera_data, config_entry.entry_id))
+            cameras.append(EzvizEnhancedCamera(coordinator, config_entry, serial, camera_data))
 
     async_add_entities(cameras, True)
 
 
 class EzvizEnhancedCamera(Camera):
     """Representation of an EZVIZ Enhanced camera."""
+    
+    # Déclarer explicitement le support du streaming
+    _attr_supported_features = CameraEntityFeature.STREAM
 
     def __init__(
         self,
         coordinator: EzvizDataUpdateCoordinator,
+        config_entry: ConfigEntry,
         serial: str,
         camera_data: dict,
-        entry_id: str,
     ):
         """Initialize the camera."""
         super().__init__()
         self.coordinator = coordinator
+        self.config_entry = config_entry
         self.serial = serial
         self.camera_data = camera_data
-        self.entry_id = entry_id
         self._name = camera_data.get("name", f"EZVIZ {serial}")
         self._channel = camera_data.get("channel", 1)
         self._device_type = camera_data.get("device_type", "camera")
@@ -55,7 +56,8 @@ class EzvizEnhancedCamera(Camera):
         self._stream_url = camera_data.get("stream_url")
         self._ieuopen_url = camera_data.get("ieuopen_url")
         self._stream_source = None
-        self._ffmpeg_process = None
+        
+        _LOGGER.error(f"🔴 EZVIZ Enhanced Camera initialisée: {self._name}, HLS: {bool(self._hls_url)}")
 
     @property
     def name(self) -> str:
@@ -65,7 +67,12 @@ class EzvizEnhancedCamera(Camera):
     @property
     def unique_id(self) -> str:
         """Return a unique ID."""
-        return f"{DOMAIN}_camera_{self.serial}_{self._channel}_{self.entry_id[:8]}"
+        return f"ezviz_enhanced_camera_{self.config_entry.entry_id[:8]}_{self.serial}_{self._channel}"
+    
+    @property
+    def supported_features(self) -> int:
+        """Return supported features."""
+        return CameraEntityFeature.STREAM
 
     @property
     def device_info(self):
@@ -90,38 +97,47 @@ class EzvizEnhancedCamera(Camera):
             ATTR_IEUOPEN_URL: self._ieuopen_url,
         }
 
+    @property
+    def is_streaming(self) -> bool:
+        """Return true if the camera is streaming."""
+        return self._hls_url is not None or self._stream_url is not None
+
     async def async_camera_image(
         self, width: Optional[int] = None, height: Optional[int] = None
     ) -> Optional[bytes]:
         """Return bytes of camera image."""
-        # For HLS streams, we'll let Home Assistant handle the stream
-        # The stream_source method will provide the HLS URL
+        _LOGGER.error(f"🔴 EZVIZ Enhanced: Demande d'image pour {self.serial}")
+        
+        # Pour l'instant, retourner None pour forcer l'utilisation du stream
+        # Home Assistant va utiliser le stream_source() pour afficher la caméra
         return None
 
     async def stream_source(self) -> Optional[str]:
         """Return the source of the stream."""
-        # For HLS streams, return the URL directly
-        # Home Assistant should be able to handle HLS with FFmpeg
+        _LOGGER.error(f"🔴 EZVIZ Enhanced: Demande de source de stream pour {self.serial}")
+        
+        # Prioritize HLS URL as it works directly with Home Assistant
         if self._hls_url:
-            _LOGGER.error(f"🔴 EZVIZ Enhanced: Using HLS stream for camera {self.serial}: {self._hls_url}")
+            _LOGGER.error(f"🔴 EZVIZ Enhanced: Utilisation HLS URL: {self._hls_url[:100]}...")
             return self._hls_url
         
         if self._stream_url:
-            _LOGGER.error(f"🔴 EZVIZ Enhanced: Using stream URL for camera {self.serial}: {self._stream_url}")
+            _LOGGER.error(f"🔴 EZVIZ Enhanced: Utilisation stream URL: {self._stream_url[:100]}...")
             return self._stream_url
         
         if self._rtsp_url:
-            _LOGGER.error(f"🔴 EZVIZ Enhanced: Using RTSP stream for camera {self.serial}: {self._rtsp_url}")
+            _LOGGER.error(f"🔴 EZVIZ Enhanced: Utilisation RTSP URL: {self._rtsp_url[:100]}...")
             return self._rtsp_url
         
         # Try to get stream URL from coordinator
+        _LOGGER.error(f"🔴 EZVIZ Enhanced: Tentative de récupération de l'URL depuis le coordinator...")
         stream_url = await self.coordinator.async_get_stream_url(self.serial)
         if stream_url:
             self._stream_url = stream_url
-            _LOGGER.error(f"🔴 EZVIZ Enhanced: Got stream URL from coordinator for camera {self.serial}: {stream_url}")
+            _LOGGER.error(f"🔴 EZVIZ Enhanced: URL récupérée: {stream_url[:100]}...")
             return stream_url
         
-        _LOGGER.error(f"🔴 EZVIZ Enhanced: No stream source available for camera {self.serial}")
+        _LOGGER.error(f"🔴 EZVIZ Enhanced: Aucune source de stream trouvée pour {self.serial}")
         return None
 
     async def async_update(self):
@@ -132,14 +148,16 @@ class EzvizEnhancedCamera(Camera):
         camera_data = await self.coordinator.async_get_camera(self.serial)
         if camera_data:
             self.camera_data = camera_data
+            old_hls = self._hls_url
             self._rtsp_url = camera_data.get("rtsp_url")
             self._hls_url = camera_data.get("hls_url")
             self._stream_url = camera_data.get("stream_url")
             self._ieuopen_url = camera_data.get("ieuopen_url")
             
-            # Log current URLs for debugging - using ERROR level to ensure visibility
-            _LOGGER.error(f"🔴 EZVIZ Enhanced: Camera {self.serial} URLs - HLS: {self._hls_url}, Stream: {self._stream_url}, RTSP: {self._rtsp_url}")
+            if self._hls_url != old_hls:
+                _LOGGER.error(f"🔴 EZVIZ Enhanced: URL HLS mise à jour pour {self.serial}: {bool(self._hls_url)}")
 
     async def async_will_remove_from_hass(self):
         """Clean up when entity is removed."""
-        await self.coordinator.async_stop_rtsp_conversion(self.serial)
+        if hasattr(self.coordinator, 'async_stop_rtsp_conversion'):
+            await self.coordinator.async_stop_rtsp_conversion(self.serial)
