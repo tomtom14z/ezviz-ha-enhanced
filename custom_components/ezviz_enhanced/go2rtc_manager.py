@@ -27,13 +27,14 @@ class Go2RtcManager:
         rtsp_url = f"rtsp://localhost:8554/{stream_name}"
         
         try:
+            # Imports nécessaires
+            import aiofiles
+            import yaml as pyyaml
+            
             # Toujours utiliser go2rtc.yaml pour éviter les problèmes avec !include
             config_file_to_use = self._go2rtc_config_file
             
             _LOGGER.error(f"🔴 EZVIZ Enhanced: Utilisation du fichier: {config_file_to_use}")
-            
-            # Utiliser aiofiles pour lecture asynchrone
-            import aiofiles
             
             if not os.path.exists(config_file_to_use):
                 # Créer go2rtc.yaml
@@ -59,7 +60,6 @@ class Go2RtcManager:
             streams_dict[stream_name] = [hls_url]
             
             # Écrire la configuration mise à jour de façon asynchrone
-            import yaml as pyyaml
             yaml_content = pyyaml.dump(config, default_flow_style=False, allow_unicode=True, sort_keys=False)
             
             async with aiofiles.open(config_file_to_use, 'w', encoding='utf-8') as f:
