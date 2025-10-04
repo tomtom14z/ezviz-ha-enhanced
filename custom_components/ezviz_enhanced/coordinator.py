@@ -183,11 +183,11 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
 
     async def async_get_stream_url(self, serial: str, force_refresh: bool = False) -> Optional[str]:
         """Get stream URL for a camera."""
-        _LOGGER.error(f"🔴 EZVIZ Coordinator: Demande d'URL pour {serial}, force_refresh={force_refresh}")
+        _LOGGER.debug(f"EZVIZ Coordinator: Demande d'URL pour {serial}, force_refresh={force_refresh}")
         
         # Force refresh if requested or if URL is not available
         if force_refresh or serial not in self.stream_urls:
-            _LOGGER.error(f"🔴 EZVIZ Coordinator: Rafraîchissement de l'URL pour {serial}")
+            _LOGGER.debug(f"EZVIZ Coordinator: Rafraîchissement de l'URL pour {serial}")
             
             if self.ezviz_open_api:
                 camera = self.cameras.get(serial)
@@ -197,20 +197,20 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
                     
                     if stream_info and stream_info.get("hls_url"):
                         self.stream_urls[serial] = stream_info["hls_url"]
-                        _LOGGER.error(f"🔴 EZVIZ Coordinator: Nouvelle URL HLS obtenue: {self.stream_urls[serial][:100]}...")
+                        _LOGGER.debug(f"EZVIZ Coordinator: Nouvelle URL HLS obtenue pour {serial}")
                         
                         # Update camera data with new URL
                         camera["hls_url"] = stream_info["hls_url"]
                         camera["stream_url"] = stream_info["hls_url"]
                         self.cameras[serial] = camera
                     else:
-                        _LOGGER.error(f"🔴 EZVIZ Coordinator: Échec de récupération de l'URL HLS")
+                        _LOGGER.warning(f"EZVIZ Coordinator: Échec de récupération de l'URL HLS pour {serial}")
         
         url = self.stream_urls.get(serial)
         if url:
-            _LOGGER.error(f"🔴 EZVIZ Coordinator: URL retournée: {url[:100]}...")
+            _LOGGER.debug(f"EZVIZ Coordinator: URL retournée pour {serial}")
         else:
-            _LOGGER.error(f"🔴 EZVIZ Coordinator: Aucune URL disponible pour {serial}")
+            _LOGGER.warning(f"EZVIZ Coordinator: Aucune URL disponible pour {serial}")
         
         return url
 

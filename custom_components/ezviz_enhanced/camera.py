@@ -60,7 +60,7 @@ class EzvizEnhancedCamera(Camera):
         self._rtsp_local_url = camera_data.get("rtsp_local_url")
         self._last_url = None
         
-        _LOGGER.error(f"🔴 EZVIZ Enhanced Camera initialisée: {self._name}, HLS: {bool(self._hls_url)}, RTSP Local: {bool(self._rtsp_local_url)}")
+        _LOGGER.info(f"✅ EZVIZ Enhanced Camera initialisée: {self._name}, HLS: {bool(self._hls_url)}, RTSP Local: {bool(self._rtsp_local_url)}")
 
     @property
     def name(self) -> str:
@@ -115,7 +115,7 @@ class EzvizEnhancedCamera(Camera):
         self, width: Optional[int] = None, height: Optional[int] = None
     ) -> Optional[bytes]:
         """Return bytes of camera image."""
-        _LOGGER.error(f"🔴 EZVIZ Enhanced: Demande d'image miniature pour {self.serial}")
+        _LOGGER.debug(f"EZVIZ Enhanced: Demande d'image miniature pour {self.serial}")
         
         # Obtenir l'URL du stream
         stream_url = await self.stream_source()
@@ -136,7 +136,7 @@ class EzvizEnhancedCamera(Camera):
                 "pipe:1"
             ]
             
-            _LOGGER.error(f"🔴 EZVIZ Enhanced: Génération de la miniature avec FFmpeg...")
+            _LOGGER.debug(f"EZVIZ Enhanced: Génération de la miniature avec FFmpeg...")
             
             process = await asyncio.create_subprocess_exec(
                 *ffmpeg_cmd,
@@ -147,10 +147,10 @@ class EzvizEnhancedCamera(Camera):
             stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=10)
             
             if process.returncode == 0 and stdout:
-                _LOGGER.error(f"🔴 EZVIZ Enhanced: Miniature générée avec succès ({len(stdout)} bytes)")
+                _LOGGER.debug(f"EZVIZ Enhanced: Miniature générée avec succès ({len(stdout)} bytes)")
                 return stdout
             else:
-                _LOGGER.error(f"🔴 EZVIZ Enhanced: Échec FFmpeg: {stderr.decode()[:200]}")
+                _LOGGER.warning(f"EZVIZ Enhanced: Échec FFmpeg: {stderr.decode()[:200]}")
                 return None
                 
         except asyncio.TimeoutError:
@@ -162,7 +162,7 @@ class EzvizEnhancedCamera(Camera):
 
     async def stream_source(self) -> Optional[str]:
         """Return the source of the stream."""
-        _LOGGER.error(f"🔴 EZVIZ Enhanced: Demande de source de stream pour {self.serial}")
+        _LOGGER.debug(f"EZVIZ Enhanced: Demande de source de stream pour {self.serial}")
         
         # Récupérer l'URL fraîche depuis le coordinator
         stream_url = await self.coordinator.async_get_stream_url(self.serial, force_refresh=False)
@@ -171,27 +171,27 @@ class EzvizEnhancedCamera(Camera):
             self._last_url = stream_url
             self._hls_url = stream_url
             self._stream_url = stream_url
-            _LOGGER.error(f"🔴 EZVIZ Enhanced: URL stream retournée: {stream_url[:100]}...")
+            _LOGGER.debug(f"EZVIZ Enhanced: URL stream retournée: {stream_url[:100]}...")
             return stream_url
         
         # Fallback sur les URLs stockées
         if self._last_url:
-            _LOGGER.error(f"🔴 EZVIZ Enhanced: Utilisation dernière URL connue: {self._last_url[:100]}...")
+            _LOGGER.debug(f"EZVIZ Enhanced: Utilisation dernière URL connue")
             return self._last_url
             
         if self._hls_url:
-            _LOGGER.error(f"🔴 EZVIZ Enhanced: Utilisation HLS URL initiale: {self._hls_url[:100]}...")
+            _LOGGER.debug(f"EZVIZ Enhanced: Utilisation HLS URL initiale")
             return self._hls_url
         
         if self._stream_url:
-            _LOGGER.error(f"🔴 EZVIZ Enhanced: Utilisation stream URL: {self._stream_url[:100]}...")
+            _LOGGER.debug(f"EZVIZ Enhanced: Utilisation stream URL")
             return self._stream_url
         
         if self._rtsp_url:
-            _LOGGER.error(f"🔴 EZVIZ Enhanced: Utilisation RTSP URL: {self._rtsp_url[:100]}...")
+            _LOGGER.debug(f"EZVIZ Enhanced: Utilisation RTSP URL")
             return self._rtsp_url
         
-        _LOGGER.error(f"🔴 EZVIZ Enhanced: Aucune source de stream trouvée pour {self.serial}")
+        _LOGGER.warning(f"EZVIZ Enhanced: Aucune source de stream trouvée pour {self.serial}")
         return None
     
     @property
@@ -216,7 +216,7 @@ class EzvizEnhancedCamera(Camera):
             self._rtsp_local_url = camera_data.get("rtsp_local_url")
             
             if self._hls_url != old_hls:
-                _LOGGER.error(f"🔴 EZVIZ Enhanced: URL HLS mise à jour pour {self.serial}: {bool(self._hls_url)}")
+                _LOGGER.info(f"EZVIZ Enhanced: URL HLS mise à jour pour {self.serial}")
 
     async def async_will_remove_from_hass(self):
         """Clean up when entity is removed."""
