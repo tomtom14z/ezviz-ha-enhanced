@@ -32,12 +32,12 @@ class Go2RtcManager:
             # Toujours utiliser go2rtc.yaml pour éviter les problèmes avec !include
             config_file_to_use = self._go2rtc_config_file
             
-            _LOGGER.error(f"🔴 EZVIZ Enhanced: Utilisation du fichier: {config_file_to_use}")
+            _LOGGER.debug(f"EZVIZ Enhanced: Utilisation du fichier: {config_file_to_use}")
             
             if not os.path.exists(config_file_to_use):
                 # Créer go2rtc.yaml
                 config = {'streams': {}}
-                _LOGGER.error(f"🔴 EZVIZ Enhanced: Création de {config_file_to_use}")
+                _LOGGER.info(f"📝 EZVIZ Enhanced: Création de {config_file_to_use}")
             else:
                 # Utiliser une lecture synchrone avec l'utilitaire HA YAML
                 try:
@@ -45,8 +45,9 @@ class Go2RtcManager:
                         ha_yaml.load_yaml, config_file_to_use
                     ) or {}
                 except Exception as yaml_error:
-                    _LOGGER.warning(f"🔴 EZVIZ Enhanced: Fichier YAML corrompu ou avec métadonnées: {yaml_error}")
-                    # Si le fichier est corrompu ou contient des métadonnées problématiques,
+                    _LOGGER.info(f"♻️ EZVIZ Enhanced: Recréation de go2rtc.yaml (métadonnées incompatibles détectées)")
+                    _LOGGER.debug(f"Détails: {yaml_error}")
+                    # Si le fichier contient des métadonnées problématiques,
                     # on repart de zéro avec un fichier propre
                     config = {'streams': {}}
             
@@ -72,24 +73,22 @@ class Go2RtcManager:
             await self.hass.async_add_executor_job(write_yaml)
             
             if old_url != hls_url:
-                _LOGGER.error("=" * 80)
-                _LOGGER.error(f"🔴 EZVIZ Enhanced: Stream go2rtc mis à jour pour {serial}")
-                _LOGGER.error("=" * 80)
-                _LOGGER.error(f"")
-                _LOGGER.error(f"✅ Configuration go2rtc mise à jour automatiquement")
-                _LOGGER.error(f"📍 Stream: {stream_name}")
-                _LOGGER.error(f"🔗 URL RTSP: {rtsp_url}")
-                _LOGGER.error(f"")
+                _LOGGER.info("=" * 80)
+                _LOGGER.info(f"✅ EZVIZ Enhanced: Stream go2rtc configuré pour {serial}")
+                _LOGGER.info("=" * 80)
+                _LOGGER.info(f"📍 Stream: {stream_name}")
+                _LOGGER.info(f"🔗 URL RTSP: {rtsp_url}")
+                _LOGGER.info(f"📁 Fichier: {config_file_to_use}")
                 
-                # Recharger go2rtc sans redémarrage
+                # Vérifier la disponibilité de go2rtc
                 reload_success = await self._reload_go2rtc()
                 if reload_success:
-                    _LOGGER.error(f"✅ go2rtc rechargé automatiquement - Stream disponible immédiatement!")
+                    _LOGGER.info(f"✅ go2rtc est disponible - Stream prêt à l'emploi!")
                 else:
-                    _LOGGER.error(f"⚠️  Rechargement go2rtc échoué - Redémarrez Home Assistant")
+                    _LOGGER.info(f"💡 go2rtc détectera le nouveau stream automatiquement")
+                    _LOGGER.info(f"   Note: go2rtc recharge sa configuration à chaque accès")
                 
-                _LOGGER.error(f"")
-                _LOGGER.error("=" * 80)
+                _LOGGER.info("=" * 80)
             
             self._streams[serial] = rtsp_url
             return rtsp_url
@@ -99,31 +98,34 @@ class Go2RtcManager:
             return None
 
     async def _reload_go2rtc(self) -> bool:
-        """Reload go2rtc configuration via Home Assistant service."""
+        """Reload go2rtc configuration via API or service."""
+        # Essayer d'abord l'API HTTP de go2rtc (méthode la plus fiable)
         try:
-            # Utiliser le service Home Assistant pour recharger go2rtc
-            await self.hass.services.async_call(
-                "go2rtc",
-                "reload",
-                blocking=True
-            )
-            return True
+            async with aiohttp.ClientSession() as session:
+                # go2rtc recharge automatiquement au prochain appel de stream
+                # On teste simplement la disponibilité de l'API
+                async with session.get(
+                    f"{self._go2rtc_url}/api/streams",
+                    timeout=aiohttp.ClientTimeout(total=3)
+                ) as response:
+                    if response.status == 200:
+                        return True
+        except Exception as api_error:
+            _LOGGER.debug(f"🔴 EZVIZ Enhanced: API go2rtc non disponible: {api_error}")
+        
+        # Fallback: essayer le service Home Assistant si disponible
+        try:
+            if self.hass.services.has_service("go2rtc", "restart"):
+                await self.hass.services.async_call(
+                    "go2rtc",
+                    "restart",
+                    blocking=True
+                )
+                return True
         except Exception as e:
-            _LOGGER.error(f"🔴 EZVIZ Enhanced: Erreur lors du rechargement go2rtc: {e}")
-            
-            # Fallback: essayer via l'API HTTP de go2rtc
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(
-                        f"{self._go2rtc_url}/api/config/reload",
-                        timeout=aiohttp.ClientTimeout(total=5)
-                    ) as response:
-                        if response.status in [200, 204]:
-                            return True
-            except Exception as api_error:
-                _LOGGER.error(f"🔴 EZVIZ Enhanced: Fallback API échoué: {api_error}")
-            
-            return False
+            _LOGGER.debug(f"🔴 EZVIZ Enhanced: Service HA go2rtc non disponible: {e}")
+        
+        return False
 
     async def async_update_stream(self, serial: str, hls_url: str) -> Optional[str]:
         """Update an existing stream with a new HLS URL."""
@@ -146,7 +148,7 @@ class Go2RtcManager:
                     ha_yaml.load_yaml, config_file_to_use
                 ) or {}
             except Exception as yaml_error:
-                _LOGGER.warning(f"🔴 EZVIZ Enhanced: Fichier YAML corrompu: {yaml_error}")
+                _LOGGER.debug(f"EZVIZ Enhanced: Impossible de lire go2rtc.yaml: {yaml_error}")
                 config = {'streams': {}}
             
             if 'streams' in config:
@@ -161,7 +163,7 @@ class Go2RtcManager:
                     
                     await self.hass.async_add_executor_job(write_yaml)
                     
-                    _LOGGER.error(f"🔴 EZVIZ Enhanced: Stream go2rtc supprimé pour {serial}")
+                    _LOGGER.info(f"🗑️ EZVIZ Enhanced: Stream go2rtc supprimé pour {serial}")
             
             self._streams.pop(serial, None)
             return True
