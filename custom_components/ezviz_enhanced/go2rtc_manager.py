@@ -31,6 +31,20 @@ class Go2RtcManager:
             import aiofiles
             import yaml as pyyaml
             
+            # Créer un loader personnalisé qui ignore les tags inconnus (métadonnées HA)
+            class SafeLoaderIgnoreUnknown(pyyaml.SafeLoader):
+                pass
+            
+            def construct_undefined(loader, node):
+                if isinstance(node, pyyaml.MappingNode):
+                    return loader.construct_mapping(node)
+                elif isinstance(node, pyyaml.SequenceNode):
+                    return loader.construct_sequence(node)
+                else:
+                    return loader.construct_scalar(node)
+            
+            SafeLoaderIgnoreUnknown.add_constructor(None, construct_undefined)
+            
             # Toujours utiliser go2rtc.yaml pour éviter les problèmes avec !include
             config_file_to_use = self._go2rtc_config_file
             
@@ -43,8 +57,8 @@ class Go2RtcManager:
             else:
                 async with aiofiles.open(config_file_to_use, 'r', encoding='utf-8') as f:
                     content = await f.read()
-                    # Utiliser pyyaml directement pour éviter les métadonnées HA
-                    config = pyyaml.safe_load(content) or {}
+                    # Utiliser le loader personnalisé pour ignorer les métadonnées HA
+                    config = pyyaml.load(content, Loader=SafeLoaderIgnoreUnknown) or {}
             
             # go2rtc.yaml : les streams sont à la racine
             if 'streams' not in config:
@@ -132,12 +146,26 @@ class Go2RtcManager:
             import aiofiles
             import yaml as pyyaml
             
+            # Créer un loader personnalisé qui ignore les tags inconnus (métadonnées HA)
+            class SafeLoaderIgnoreUnknown(pyyaml.SafeLoader):
+                pass
+            
+            def construct_undefined(loader, node):
+                if isinstance(node, pyyaml.MappingNode):
+                    return loader.construct_mapping(node)
+                elif isinstance(node, pyyaml.SequenceNode):
+                    return loader.construct_sequence(node)
+                else:
+                    return loader.construct_scalar(node)
+            
+            SafeLoaderIgnoreUnknown.add_constructor(None, construct_undefined)
+            
             if not os.path.exists(config_file_to_use):
                 return True
             
             async with aiofiles.open(config_file_to_use, 'r', encoding='utf-8') as f:
                 content = await f.read()
-                config = pyyaml.safe_load(content) or {}
+                config = pyyaml.load(content, Loader=SafeLoaderIgnoreUnknown) or {}
             
             if 'streams' in config:
                 if stream_name in config['streams']:
