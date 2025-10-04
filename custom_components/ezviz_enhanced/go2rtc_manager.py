@@ -62,13 +62,40 @@ class Go2RtcManager:
                 config['streams'] = {}
             streams_dict = config['streams']
             
+            # Ajouter les options globales go2rtc si elles n'existent pas
+            if 'ffmpeg' not in config:
+                config['ffmpeg'] = {
+                    'bin': 'ffmpeg'  # Chemin vers FFmpeg
+                }
+            
+            if 'rtsp' not in config:
+                config['rtsp'] = {
+                    'listen': ':8554'  # Port RTSP
+                }
+            
+            if 'webrtc' not in config:
+                config['webrtc'] = {
+                    'listen': ':8555'  # Port WebRTC
+                }
+            
             # Ajouter ou mettre à jour le stream
             old_url = streams_dict.get(stream_name)
             
             if isinstance(old_url, list) and len(old_url) > 0:
                 old_url = old_url[0]
             
-            streams_dict[stream_name] = [hls_url]
+            # Configuration go2rtc avec URL directe + fallback FFmpeg optimisé pour EZVIZ
+            # FFmpeg avec reconnexion automatique, timeout élevé et copie des codecs
+            ffmpeg_source = (
+                f"ffmpeg:{stream_name}#video=copy#audio=copy"
+                f"#raw=-timeout 5000000 -reconnect 1 -reconnect_streamed 1 "
+                f"-reconnect_delay_max 2 -fflags +genpts -use_wallclock_as_timestamps 1"
+            )
+            
+            streams_dict[stream_name] = [
+                hls_url,           # Essayer d'abord l'URL directe
+                ffmpeg_source      # Fallback avec FFmpeg si l'URL directe ne marche pas
+            ]
             
             # Écrire la configuration mise à jour
             def write_yaml():
@@ -85,21 +112,30 @@ class Go2RtcManager:
                 _LOGGER.info(f"📍 Stream: {stream_name}")
                 _LOGGER.info(f"🔗 URL RTSP: {rtsp_url}")
                 _LOGGER.info(f"📁 Fichier: {config_file_to_use}")
+                _LOGGER.info(f"🎬 Sources: URL directe HLS + FFmpeg (reconnexion automatique)")
                 _LOGGER.info("")
                 
                 # Vérifier la disponibilité de go2rtc
                 reload_success = await self._reload_go2rtc()
                 if reload_success:
                     _LOGGER.info(f"✅ go2rtc est installé et fonctionne!")
-                    _LOGGER.info(f"   Vous pouvez accéder au stream via: {rtsp_url}")
-                    _LOGGER.info(f"   Interface go2rtc: http://localhost:1984/")
+                    _LOGGER.info(f"")
+                    _LOGGER.info(f"📺 Interface go2rtc: http://localhost:1984/")
+                    _LOGGER.info(f"   → Cliquez sur '{stream_name}' pour visualiser le stream")
+                    _LOGGER.info(f"")
+                    _LOGGER.info(f"🔗 URL RTSP pour VLC/Homebridge: {rtsp_url}")
+                    _LOGGER.info(f"")
+                    _LOGGER.info(f"⚠️  Si l'add-on go2rtc est utilisé, rechargez la configuration:")
+                    _LOGGER.info(f"   1. Ouvrez l'interface go2rtc")
+                    _LOGGER.info(f"   2. Cliquez sur 'Config' (en haut)")
+                    _LOGGER.info(f"   3. Cliquez sur 'Save and Restart'")
                 else:
                     _LOGGER.warning(f"⚠️  go2rtc n'est pas installé ou ne fonctionne pas")
                     _LOGGER.warning(f"")
                     _LOGGER.warning(f"Pour utiliser les streams RTSP, installez go2rtc:")
-                    _LOGGER.warning(f"1. Dans HACS, recherchez et installez 'go2rtc'")
-                    _LOGGER.warning(f"2. Redémarrez Home Assistant")
-                    _LOGGER.warning(f"3. Le stream sera automatiquement disponible dans go2rtc")
+                    _LOGGER.warning(f"1. Dans HACS, recherchez et installez 'WebRTC Camera'")
+                    _LOGGER.warning(f"2. OU installez l'add-on go2rtc dans Modules complémentaires")
+                    _LOGGER.warning(f"3. Redémarrez Home Assistant")
                     _LOGGER.warning(f"")
                     _LOGGER.warning(f"Documentation: https://github.com/AlexxIT/go2rtc")
                 
