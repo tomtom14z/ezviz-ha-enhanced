@@ -27,23 +27,7 @@ class Go2RtcManager:
         rtsp_url = f"rtsp://localhost:8554/{stream_name}"
         
         try:
-            # Imports nécessaires
-            import aiofiles
             import yaml as pyyaml
-            
-            # Créer un loader personnalisé qui ignore les tags inconnus (métadonnées HA)
-            class SafeLoaderIgnoreUnknown(pyyaml.SafeLoader):
-                pass
-            
-            def construct_undefined(loader, node):
-                if isinstance(node, pyyaml.MappingNode):
-                    return loader.construct_mapping(node)
-                elif isinstance(node, pyyaml.SequenceNode):
-                    return loader.construct_sequence(node)
-                else:
-                    return loader.construct_scalar(node)
-            
-            SafeLoaderIgnoreUnknown.add_constructor(None, construct_undefined)
             
             # Toujours utiliser go2rtc.yaml pour éviter les problèmes avec !include
             config_file_to_use = self._go2rtc_config_file
@@ -55,10 +39,16 @@ class Go2RtcManager:
                 config = {'streams': {}}
                 _LOGGER.error(f"🔴 EZVIZ Enhanced: Création de {config_file_to_use}")
             else:
-                async with aiofiles.open(config_file_to_use, 'r', encoding='utf-8') as f:
-                    content = await f.read()
-                    # Utiliser le loader personnalisé pour ignorer les métadonnées HA
-                    config = pyyaml.load(content, Loader=SafeLoaderIgnoreUnknown) or {}
+                # Utiliser une lecture synchrone avec l'utilitaire HA YAML
+                try:
+                    config = await self.hass.async_add_executor_job(
+                        ha_yaml.load_yaml, config_file_to_use
+                    ) or {}
+                except Exception as yaml_error:
+                    _LOGGER.warning(f"🔴 EZVIZ Enhanced: Fichier YAML corrompu ou avec métadonnées: {yaml_error}")
+                    # Si le fichier est corrompu ou contient des métadonnées problématiques,
+                    # on repart de zéro avec un fichier propre
+                    config = {'streams': {}}
             
             # go2rtc.yaml : les streams sont à la racine
             if 'streams' not in config:
@@ -73,11 +63,13 @@ class Go2RtcManager:
             
             streams_dict[stream_name] = [hls_url]
             
-            # Écrire la configuration mise à jour de façon asynchrone
-            yaml_content = pyyaml.dump(config, default_flow_style=False, allow_unicode=True, sort_keys=False)
+            # Écrire la configuration mise à jour
+            def write_yaml():
+                yaml_content = pyyaml.dump(config, default_flow_style=False, allow_unicode=True, sort_keys=False)
+                with open(config_file_to_use, 'w', encoding='utf-8') as f:
+                    f.write(yaml_content)
             
-            async with aiofiles.open(config_file_to_use, 'w', encoding='utf-8') as f:
-                await f.write(yaml_content)
+            await self.hass.async_add_executor_job(write_yaml)
             
             if old_url != hls_url:
                 _LOGGER.error("=" * 80)
@@ -143,37 +135,31 @@ class Go2RtcManager:
         config_file_to_use = self._go2rtc_config_file
         
         try:
-            import aiofiles
             import yaml as pyyaml
-            
-            # Créer un loader personnalisé qui ignore les tags inconnus (métadonnées HA)
-            class SafeLoaderIgnoreUnknown(pyyaml.SafeLoader):
-                pass
-            
-            def construct_undefined(loader, node):
-                if isinstance(node, pyyaml.MappingNode):
-                    return loader.construct_mapping(node)
-                elif isinstance(node, pyyaml.SequenceNode):
-                    return loader.construct_sequence(node)
-                else:
-                    return loader.construct_scalar(node)
-            
-            SafeLoaderIgnoreUnknown.add_constructor(None, construct_undefined)
             
             if not os.path.exists(config_file_to_use):
                 return True
             
-            async with aiofiles.open(config_file_to_use, 'r', encoding='utf-8') as f:
-                content = await f.read()
-                config = pyyaml.load(content, Loader=SafeLoaderIgnoreUnknown) or {}
+            # Utiliser une lecture synchrone avec l'utilitaire HA YAML
+            try:
+                config = await self.hass.async_add_executor_job(
+                    ha_yaml.load_yaml, config_file_to_use
+                ) or {}
+            except Exception as yaml_error:
+                _LOGGER.warning(f"🔴 EZVIZ Enhanced: Fichier YAML corrompu: {yaml_error}")
+                config = {'streams': {}}
             
             if 'streams' in config:
                 if stream_name in config['streams']:
                     del config['streams'][stream_name]
                     
-                    yaml_content = pyyaml.dump(config, default_flow_style=False, allow_unicode=True, sort_keys=False)
-                    async with aiofiles.open(config_file_to_use, 'w', encoding='utf-8') as f:
-                        await f.write(yaml_content)
+                    # Écrire la configuration mise à jour
+                    def write_yaml():
+                        yaml_content = pyyaml.dump(config, default_flow_style=False, allow_unicode=True, sort_keys=False)
+                        with open(config_file_to_use, 'w', encoding='utf-8') as f:
+                            f.write(yaml_content)
+                    
+                    await self.hass.async_add_executor_job(write_yaml)
                     
                     _LOGGER.error(f"🔴 EZVIZ Enhanced: Stream go2rtc supprimé pour {serial}")
             
