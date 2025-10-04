@@ -3,7 +3,6 @@ import logging
 from typing import Optional, Dict
 import os
 import aiohttp
-from homeassistant.util import yaml as ha_yaml
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -39,16 +38,23 @@ class Go2RtcManager:
                 config = {'streams': {}}
                 _LOGGER.info(f"📝 EZVIZ Enhanced: Création de {config_file_to_use}")
             else:
-                # Utiliser une lecture synchrone avec l'utilitaire HA YAML
-                try:
-                    config = await self.hass.async_add_executor_job(
-                        ha_yaml.load_yaml, config_file_to_use
-                    ) or {}
-                except Exception as yaml_error:
-                    _LOGGER.info(f"♻️ EZVIZ Enhanced: Recréation de go2rtc.yaml (métadonnées incompatibles détectées)")
-                    _LOGGER.debug(f"Détails: {yaml_error}")
-                    # Si le fichier contient des métadonnées problématiques,
-                    # on repart de zéro avec un fichier propre
+                # Lire le fichier avec yaml standard (pas ha_yaml pour éviter les métadonnées)
+                def read_yaml():
+                    try:
+                        with open(config_file_to_use, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                            # Si le fichier contient des tags annotatedyaml, on le recrée
+                            if 'annotatedyaml' in content or '!!python' in content:
+                                _LOGGER.info(f"♻️ EZVIZ Enhanced: go2rtc.yaml contient des métadonnées, recréation...")
+                                return None
+                            return pyyaml.safe_load(content) or {}
+                    except Exception as e:
+                        _LOGGER.info(f"♻️ EZVIZ Enhanced: Erreur lecture go2rtc.yaml, recréation...")
+                        _LOGGER.debug(f"Détails: {e}")
+                        return None
+                
+                config = await self.hass.async_add_executor_job(read_yaml)
+                if config is None:
                     config = {'streams': {}}
             
             # go2rtc.yaml : les streams sont à la racine
@@ -151,13 +157,21 @@ class Go2RtcManager:
             if not os.path.exists(config_file_to_use):
                 return True
             
-            # Utiliser une lecture synchrone avec l'utilitaire HA YAML
-            try:
-                config = await self.hass.async_add_executor_job(
-                    ha_yaml.load_yaml, config_file_to_use
-                ) or {}
-            except Exception as yaml_error:
-                _LOGGER.debug(f"EZVIZ Enhanced: Impossible de lire go2rtc.yaml: {yaml_error}")
+            # Lire le fichier avec yaml standard (pas ha_yaml pour éviter les métadonnées)
+            def read_yaml():
+                try:
+                    with open(config_file_to_use, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                        # Si le fichier contient des tags annotatedyaml, on le recrée
+                        if 'annotatedyaml' in content or '!!python' in content:
+                            return None
+                        return pyyaml.safe_load(content) or {}
+                except Exception as e:
+                    _LOGGER.debug(f"EZVIZ Enhanced: Impossible de lire go2rtc.yaml: {e}")
+                    return None
+            
+            config = await self.hass.async_add_executor_job(read_yaml)
+            if config is None:
                 config = {'streams': {}}
             
             if 'streams' in config:
