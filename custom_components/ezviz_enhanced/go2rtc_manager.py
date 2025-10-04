@@ -79,14 +79,23 @@ class Go2RtcManager:
                 _LOGGER.info(f"📍 Stream: {stream_name}")
                 _LOGGER.info(f"🔗 URL RTSP: {rtsp_url}")
                 _LOGGER.info(f"📁 Fichier: {config_file_to_use}")
+                _LOGGER.info("")
                 
                 # Vérifier la disponibilité de go2rtc
                 reload_success = await self._reload_go2rtc()
                 if reload_success:
-                    _LOGGER.info(f"✅ go2rtc est disponible - Stream prêt à l'emploi!")
+                    _LOGGER.info(f"✅ go2rtc est installé et fonctionne!")
+                    _LOGGER.info(f"   Vous pouvez accéder au stream via: {rtsp_url}")
+                    _LOGGER.info(f"   Interface go2rtc: http://localhost:1984/")
                 else:
-                    _LOGGER.info(f"💡 go2rtc détectera le nouveau stream automatiquement")
-                    _LOGGER.info(f"   Note: go2rtc recharge sa configuration à chaque accès")
+                    _LOGGER.warning(f"⚠️  go2rtc n'est pas installé ou ne fonctionne pas")
+                    _LOGGER.warning(f"")
+                    _LOGGER.warning(f"Pour utiliser les streams RTSP, installez go2rtc:")
+                    _LOGGER.warning(f"1. Dans HACS, recherchez et installez 'go2rtc'")
+                    _LOGGER.warning(f"2. Redémarrez Home Assistant")
+                    _LOGGER.warning(f"3. Le stream sera automatiquement disponible dans go2rtc")
+                    _LOGGER.warning(f"")
+                    _LOGGER.warning(f"Documentation: https://github.com/AlexxIT/go2rtc")
                 
                 _LOGGER.info("=" * 80)
             
@@ -182,5 +191,7 @@ class Go2RtcManager:
 
     @property
     def is_available(self) -> bool:
-        """Return if go2rtc is available (always True as we write to config file)."""
-        return os.path.exists(self._config_file)
+        """Return if go2rtc configuration is available (always True - we create go2rtc.yaml)."""
+        # On retourne toujours True car on crée go2rtc.yaml automatiquement
+        # go2rtc chargera les streams au démarrage ou au prochain accès
+        return True
