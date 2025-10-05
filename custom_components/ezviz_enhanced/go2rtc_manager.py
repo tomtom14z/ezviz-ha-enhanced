@@ -148,7 +148,24 @@ class Go2RtcManager:
 
     async def _reload_go2rtc(self, stream_name: str = None) -> bool:
         """Reload go2rtc configuration via API or service."""
-        # Méthode 1 : Forcer rechargement de la config + restart du stream spécifique
+        # Méthode 1 : Redémarrer l'add-on go2rtc (solution la plus fiable)
+        try:
+            if self.hass.services.has_service("hassio", "addon_restart"):
+                _LOGGER.info("🔄 Redémarrage de l'add-on go2rtc...")
+                await self.hass.services.async_call(
+                    "hassio",
+                    "addon_restart",
+                    {"addon": "a0d7b954_go2rtc"},
+                    blocking=False  # Non-bloquant pour ne pas attendre le redémarrage complet
+                )
+                # Attendre quelques secondes que go2rtc redémarre
+                await asyncio.sleep(3)
+                _LOGGER.info("✅ Add-on go2rtc redémarré avec nouvelle configuration")
+                return True
+        except Exception as addon_error:
+            _LOGGER.debug(f"Redémarrage add-on échoué, tentative API: {addon_error}")
+        
+        # Méthode 2 : Reload via API (moins fiable mais fonctionne sans add-on)
         try:
             async with aiohttp.ClientSession() as session:
                 # Étape 1 : Recharger la configuration
@@ -158,37 +175,12 @@ class Go2RtcManager:
                 ) as response:
                     if response.status in [200, 204]:
                         _LOGGER.info("✅ Configuration go2rtc rechargée via API")
-                        
-                        # Étape 2 : Forcer restart du stream spécifique pour utiliser la nouvelle URL
-                        if stream_name:
-                            try:
-                                # DELETE + GET force le stream à se reconnecter avec la nouvelle config
-                                async with session.delete(
-                                    f"{self._go2rtc_url}/api/streams?src={stream_name}",
-                                    timeout=aiohttp.ClientTimeout(total=3)
-                                ) as del_response:
-                                    _LOGGER.debug(f"Stream {stream_name} arrêté (status: {del_response.status})")
-                                
-                                # Petit délai pour s'assurer que le stream est bien fermé
-                                await asyncio.sleep(0.5)
-                                
-                                # Redémarrer le stream en demandant un snapshot (force connexion)
-                                async with session.get(
-                                    f"{self._go2rtc_url}/api/frame.jpeg?src={stream_name}",
-                                    timeout=aiohttp.ClientTimeout(total=5)
-                                ) as start_response:
-                                    if start_response.status == 200:
-                                        _LOGGER.info(f"✅ Stream {stream_name} redémarré avec nouvelle URL")
-                                    else:
-                                        _LOGGER.warning(f"⚠️ Stream {stream_name} démarrage partiel (status: {start_response.status})")
-                            except Exception as stream_error:
-                                _LOGGER.debug(f"Restart du stream échoué, il redémarrera au prochain accès: {stream_error}")
-                        
+                        _LOGGER.warning("⚠️ Reload API utilisé : stream peut nécessiter reconnexion manuelle")
                         return True
         except Exception as api_error:
             _LOGGER.debug(f"API reload échouée: {api_error}")
         
-        # Méthode 2 : Vérifier que go2rtc fonctionne au moins
+        # Méthode 3 : Vérifier que go2rtc fonctionne au moins
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
@@ -201,19 +193,6 @@ class Go2RtcManager:
                         return True
         except Exception:
             pass
-        
-        # Méthode 3 : Service Home Assistant (si add-on)
-        try:
-            if self.hass.services.has_service("go2rtc", "restart"):
-                await self.hass.services.async_call(
-                    "go2rtc",
-                    "restart",
-                    blocking=True
-                )
-                _LOGGER.info("✅ go2rtc redémarré via service Home Assistant")
-                return True
-        except Exception as e:
-            _LOGGER.debug(f"Service HA go2rtc non disponible: {e}")
         
         return False
 
