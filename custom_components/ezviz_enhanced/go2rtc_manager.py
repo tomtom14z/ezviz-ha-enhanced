@@ -1,4 +1,5 @@
 """go2rtc Manager for EZVIZ Enhanced integration."""
+import asyncio
 import logging
 from typing import Optional, Dict
 import os
@@ -105,8 +106,8 @@ class Go2RtcManager:
             
             await self.hass.async_add_executor_job(write_yaml)
             
-            # Forcer rechargement go2rtc après écriture du fichier
-            reload_success = await self._reload_go2rtc()
+            # Forcer rechargement go2rtc après écriture du fichier (avec nom du stream)
+            reload_success = await self._reload_go2rtc(stream_name=stream_name)
             
             if old_url != hls_url:
                 _LOGGER.info("=" * 80)
@@ -144,21 +145,44 @@ class Go2RtcManager:
             _LOGGER.error(f"🔴 EZVIZ Enhanced: Erreur lors de la mise à jour de configuration.yaml: {e}")
             return None
 
-    async def _reload_go2rtc(self) -> bool:
+    async def _reload_go2rtc(self, stream_name: str = None) -> bool:
         """Reload go2rtc configuration via API or service."""
-        # Méthode 1 : Forcer rechargement via API (préféré)
+        # Méthode 1 : Forcer rechargement de la config + restart du stream spécifique
         try:
             async with aiohttp.ClientSession() as session:
-                # Endpoint pour recharger la configuration
+                # Étape 1 : Recharger la configuration
                 async with session.post(
                     f"{self._go2rtc_url}/api/config/reload",
                     timeout=aiohttp.ClientTimeout(total=5)
                 ) as response:
                     if response.status in [200, 204]:
-                        _LOGGER.info("✅ Configuration go2rtc rechargée automatiquement via API")
+                        _LOGGER.info("✅ Configuration go2rtc rechargée via API")
+                        
+                        # Étape 2 : Forcer restart du stream spécifique pour utiliser la nouvelle URL
+                        if stream_name:
+                            try:
+                                # DELETE + GET force le stream à se reconnecter avec la nouvelle config
+                                async with session.delete(
+                                    f"{self._go2rtc_url}/api/streams?src={stream_name}",
+                                    timeout=aiohttp.ClientTimeout(total=3)
+                                ) as del_response:
+                                    _LOGGER.debug(f"Stream {stream_name} arrêté (status: {del_response.status})")
+                                
+                                # Petit délai pour s'assurer que le stream est bien fermé
+                                await asyncio.sleep(0.5)
+                                
+                                # Redémarrer le stream en le demandant
+                                async with session.get(
+                                    f"{self._go2rtc_url}/api/stream.mp4?src={stream_name}",
+                                    timeout=aiohttp.ClientTimeout(total=2)
+                                ) as start_response:
+                                    _LOGGER.info(f"✅ Stream {stream_name} redémarré avec nouvelle URL")
+                            except Exception as stream_error:
+                                _LOGGER.debug(f"Restart du stream échoué, il redémarrera au prochain accès: {stream_error}")
+                        
                         return True
         except Exception as api_error:
-            _LOGGER.debug(f"API reload échouée, tentative de rechargement du stream: {api_error}")
+            _LOGGER.debug(f"API reload échouée: {api_error}")
         
         # Méthode 2 : Vérifier que go2rtc fonctionne au moins
         try:
