@@ -105,6 +105,9 @@ class Go2RtcManager:
             
             await self.hass.async_add_executor_job(write_yaml)
             
+            # Forcer rechargement go2rtc après écriture du fichier
+            reload_success = await self._reload_go2rtc()
+            
             if old_url != hls_url:
                 _LOGGER.info("=" * 80)
                 _LOGGER.info(f"✅ EZVIZ Enhanced: Stream go2rtc configuré pour {serial}")
@@ -115,20 +118,13 @@ class Go2RtcManager:
                 _LOGGER.info(f"🎬 Sources: URL directe HLS + FFmpeg (reconnexion automatique)")
                 _LOGGER.info("")
                 
-                # Vérifier la disponibilité de go2rtc
-                reload_success = await self._reload_go2rtc()
                 if reload_success:
-                    _LOGGER.info(f"✅ go2rtc est installé et fonctionne!")
+                    _LOGGER.info(f"✅ go2rtc rechargé automatiquement!")
                     _LOGGER.info(f"")
                     _LOGGER.info(f"📺 Interface go2rtc: http://localhost:1984/")
                     _LOGGER.info(f"   → Cliquez sur '{stream_name}' pour visualiser le stream")
                     _LOGGER.info(f"")
                     _LOGGER.info(f"🔗 URL RTSP pour VLC/Homebridge: {rtsp_url}")
-                    _LOGGER.info(f"")
-                    _LOGGER.info(f"⚠️  Si l'add-on go2rtc est utilisé, rechargez la configuration:")
-                    _LOGGER.info(f"   1. Ouvrez l'interface go2rtc")
-                    _LOGGER.info(f"   2. Cliquez sur 'Config' (en haut)")
-                    _LOGGER.info(f"   3. Cliquez sur 'Save and Restart'")
                 else:
                     _LOGGER.warning(f"⚠️  go2rtc n'est pas installé ou ne fonctionne pas")
                     _LOGGER.warning(f"")
@@ -150,21 +146,35 @@ class Go2RtcManager:
 
     async def _reload_go2rtc(self) -> bool:
         """Reload go2rtc configuration via API or service."""
-        # Essayer d'abord l'API HTTP de go2rtc (méthode la plus fiable)
+        # Méthode 1 : Forcer rechargement via API (préféré)
         try:
             async with aiohttp.ClientSession() as session:
-                # go2rtc recharge automatiquement au prochain appel de stream
-                # On teste simplement la disponibilité de l'API
+                # Endpoint pour recharger la configuration
+                async with session.post(
+                    f"{self._go2rtc_url}/api/config/reload",
+                    timeout=aiohttp.ClientTimeout(total=5)
+                ) as response:
+                    if response.status in [200, 204]:
+                        _LOGGER.info("✅ Configuration go2rtc rechargée automatiquement via API")
+                        return True
+        except Exception as api_error:
+            _LOGGER.debug(f"API reload échouée, tentative de rechargement du stream: {api_error}")
+        
+        # Méthode 2 : Vérifier que go2rtc fonctionne au moins
+        try:
+            async with aiohttp.ClientSession() as session:
                 async with session.get(
                     f"{self._go2rtc_url}/api/streams",
                     timeout=aiohttp.ClientTimeout(total=3)
                 ) as response:
                     if response.status == 200:
+                        _LOGGER.info("⚠️  go2rtc fonctionne mais rechargement auto échoué")
+                        _LOGGER.info("   → Rechargement manuel requis dans ~2h (expiration URL)")
                         return True
-        except Exception as api_error:
-            _LOGGER.debug(f"🔴 EZVIZ Enhanced: API go2rtc non disponible: {api_error}")
+        except Exception:
+            pass
         
-        # Fallback: essayer le service Home Assistant si disponible
+        # Méthode 3 : Service Home Assistant (si add-on)
         try:
             if self.hass.services.has_service("go2rtc", "restart"):
                 await self.hass.services.async_call(
@@ -172,9 +182,10 @@ class Go2RtcManager:
                     "restart",
                     blocking=True
                 )
+                _LOGGER.info("✅ go2rtc redémarré via service Home Assistant")
                 return True
         except Exception as e:
-            _LOGGER.debug(f"🔴 EZVIZ Enhanced: Service HA go2rtc non disponible: {e}")
+            _LOGGER.debug(f"Service HA go2rtc non disponible: {e}")
         
         return False
 
