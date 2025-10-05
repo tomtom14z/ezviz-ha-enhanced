@@ -19,6 +19,7 @@ class Go2RtcManager:
         self._config_file = os.path.join(hass.config.config_dir, "configuration.yaml")
         self._go2rtc_config_file = os.path.join(hass.config.config_dir, "go2rtc.yaml")
         self._go2rtc_url = "http://localhost:1984"
+        self._keepalive_tasks: Dict[str, asyncio.Task] = {}
         
     async def async_add_stream(self, serial: str, hls_url: str) -> Optional[str]:
         """Add a stream to go2rtc configuration and return the RTSP URL."""
@@ -171,12 +172,15 @@ class Go2RtcManager:
                                 # Petit délai pour s'assurer que le stream est bien fermé
                                 await asyncio.sleep(0.5)
                                 
-                                # Redémarrer le stream en le demandant
+                                # Redémarrer le stream en demandant un snapshot (force connexion)
                                 async with session.get(
-                                    f"{self._go2rtc_url}/api/stream.mp4?src={stream_name}",
-                                    timeout=aiohttp.ClientTimeout(total=2)
+                                    f"{self._go2rtc_url}/api/frame.jpeg?src={stream_name}",
+                                    timeout=aiohttp.ClientTimeout(total=5)
                                 ) as start_response:
-                                    _LOGGER.info(f"✅ Stream {stream_name} redémarré avec nouvelle URL")
+                                    if start_response.status == 200:
+                                        _LOGGER.info(f"✅ Stream {stream_name} redémarré avec nouvelle URL")
+                                    else:
+                                        _LOGGER.warning(f"⚠️ Stream {stream_name} démarrage partiel (status: {start_response.status})")
                             except Exception as stream_error:
                                 _LOGGER.debug(f"Restart du stream échoué, il redémarrera au prochain accès: {stream_error}")
                         

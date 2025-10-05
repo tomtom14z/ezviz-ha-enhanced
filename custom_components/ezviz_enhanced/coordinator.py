@@ -75,7 +75,7 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
         
         # Considérer comme expiré si moins de 5 minutes restantes
         if expiration - now < buffer_seconds:
-            _LOGGER.error(f"🔴 URL pour {serial} expire dans {expiration - now}s, rafraîchissement nécessaire")
+            _LOGGER.info(f"⏰ URL pour {serial} expire dans {expiration - now}s, rafraîchissement nécessaire")
             return True
         
         _LOGGER.debug(f"URL pour {serial} encore valide pour {expiration - now}s")
@@ -111,7 +111,7 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
                     need_refresh = self._is_url_expired(serial)
                     
                     if need_refresh:
-                        _LOGGER.error(f"🔴 Rafraîchissement de l'URL pour {serial} (expirée ou inexistante)")
+                        _LOGGER.info(f"🔄 Rafraîchissement de l'URL pour {serial} (expirée ou proche expiration)")
                         stream_info = await self.ezviz_open_api.async_get_stream_info(serial, channel)
                         if stream_info:
                             camera_data.update(stream_info)
@@ -133,19 +133,27 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
                                 if expiration:
                                     self.url_expiration[serial] = expiration
                                     remaining = expiration - int(datetime.now().timestamp())
-                                    _LOGGER.error(f"✅ Nouvelle URL pour {serial}, valide pour {remaining}s (~{remaining//60} min)")
+                                    _LOGGER.info(f"✅ Nouvelle URL HLS pour {serial}, valide pour {remaining}s (~{remaining//60} min)")
                                 
                                 # For HLS streams, use direct URL (Home Assistant can handle it)
                                 if stream_type.startswith("hls"):
                                     camera_data["stream_url"] = stream_url
                                     self.stream_urls[serial] = stream_url
+                                    camera_data["hls_url"] = stream_url
                                     
                                     # Mettre à jour go2rtc configuration automatiquement
+                                    _LOGGER.info(f"🔄 Mise à jour go2rtc pour {serial} avec nouvelle URL HLS")
                                     if self.go2rtc_manager.is_available:
+                                        _LOGGER.info(f"✅ go2rtc_manager disponible, mise à jour du stream...")
                                         rtsp_url = await self.go2rtc_manager.async_add_stream(serial, stream_url)
                                         if rtsp_url:
                                             camera_data["rtsp_local_url"] = rtsp_url
                                             self.rtsp_urls[serial] = rtsp_url
+                                            _LOGGER.info(f"✅ go2rtc mis à jour : {rtsp_url}")
+                                        else:
+                                            _LOGGER.warning(f"⚠️ Échec mise à jour go2rtc pour {serial}")
+                                    else:
+                                        _LOGGER.warning(f"⚠️ go2rtc_manager non disponible pour {serial}")
                             else:
                                 # For other formats, convert to RTSP
                                 rtsp_url = await self.stream_converter.start_rtsp_conversion(
