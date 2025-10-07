@@ -16,11 +16,13 @@ CONF_IEUOPEN_ACCESS_TOKEN = "ieuopen_access_token"
 CONF_APP_KEY = "app_key"
 CONF_APP_SECRET = "app_secret"
 CONF_GO2RTC_ADDON_ID = "go2rtc_addon_id"
+CONF_STREAM_QUALITY = "stream_quality"
 
 # Default values
 DEFAULT_RTSP_PORT = 8554
 DEFAULT_USE_IEUOPEN = True
 DEFAULT_GO2RTC_ADDON_ID = "a889bffc_go2rtc"
+DEFAULT_STREAM_QUALITY = "smooth"  # "smooth" ou "quality"
 
 # EZVIZ Open Platform API endpoints (IeuOpen)
 EZVIZ_OPEN_BASE_URL = "https://open.ezvizlife.com"

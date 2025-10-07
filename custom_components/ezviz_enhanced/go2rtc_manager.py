@@ -11,7 +11,7 @@ _LOGGER = logging.getLogger(__name__)
 class Go2RtcManager:
     """Manager for go2rtc streams via configuration file."""
 
-    def __init__(self, hass, go2rtc_addon_id: str = None):
+    def __init__(self, hass, go2rtc_addon_id: str = None, stream_quality: str = "smooth"):
         """Initialize go2rtc manager."""
         self.hass = hass
         self._streams: Dict[str, str] = {}
@@ -21,6 +21,7 @@ class Go2RtcManager:
         self._go2rtc_url = "http://localhost:1984"
         self._keepalive_tasks: Dict[str, asyncio.Task] = {}
         self._go2rtc_addon_id = go2rtc_addon_id
+        self._stream_quality = stream_quality
         
     async def async_add_stream(self, serial: str, hls_url: str) -> Optional[str]:
         """Add a stream to go2rtc configuration and return the RTSP URL."""
@@ -65,20 +66,38 @@ class Go2RtcManager:
                 config['streams'] = {}
             streams_dict = config['streams']
             
-            # Ajouter les options globales go2rtc si elles n'existent pas
+            # Ajouter les options globales go2rtc optimisées si elles n'existent pas
             if 'ffmpeg' not in config:
                 config['ffmpeg'] = {
-                    'bin': 'ffmpeg'  # Chemin vers FFmpeg
+                    'bin': 'ffmpeg',
+                    'rtsp': '-rtsp_transport tcp -timeout 5000000',
+                    'hls': '-hls_time 2 -hls_list_size 3 -hls_flags delete_segments+independent_segments',
+                    'webrtc': '-c:v libvpx -deadline realtime -cpu-used 4 -b:v 1M -maxrate 1M -bufsize 2M'
                 }
             
             if 'rtsp' not in config:
                 config['rtsp'] = {
-                    'listen': ':8554'  # Port RTSP
+                    'listen': ':8554',
+                    'timeout': '10s',
+                    'keepalive': '30s'
                 }
             
             if 'webrtc' not in config:
                 config['webrtc'] = {
-                    'listen': ':8555'  # Port WebRTC
+                    'listen': ':8555',
+                    'ice_servers': ['stun:stun.l.google.com:19302']
+                }
+            
+            # Ajouter des options de performance
+            if 'log' not in config:
+                config['log'] = {
+                    'level': 'info'
+                }
+            
+            if 'api' not in config:
+                config['api'] = {
+                    'listen': ':1984',
+                    'origin': '*'
                 }
             
             # Ajouter ou mettre à jour le stream
@@ -87,13 +106,33 @@ class Go2RtcManager:
             if isinstance(old_url, list) and len(old_url) > 0:
                 old_url = old_url[0]
             
-            # Configuration go2rtc avec URL directe + fallback FFmpeg optimisé pour EZVIZ
-            # FFmpeg avec reconnexion automatique, timeout élevé et copie des codecs
-            ffmpeg_source = (
-                f"ffmpeg:{stream_name}#video=copy#audio=copy"
-                f"#raw=-timeout 5000000 -reconnect 1 -reconnect_streamed 1 "
-                f"-reconnect_delay_max 2 -fflags +genpts -use_wallclock_as_timestamps 1"
-            )
+            # Configuration go2rtc optimisée selon le mode choisi
+            if self._stream_quality == "smooth":
+                # Mode fluide : priorité à la fluidité, moins de buffer
+                ffmpeg_source = (
+                    f"ffmpeg:{stream_name}#video=copy#audio=copy"
+                    f"#raw=-fflags +nobuffer+fastseek+flush_packets "
+                    f"-flags low_delay -strict experimental "
+                    f"-avioflags direct -fflags +genpts+igndts "
+                    f"-analyzeduration 500000 -probesize 500000 "
+                    f"-timeout 5000000 -reconnect 1 -reconnect_streamed 1 "
+                    f"-reconnect_delay_max 1 -max_reconnect_attempts 2 "
+                    f"-use_wallclock_as_timestamps 1 -avoid_negative_ts make_zero "
+                    f"-max_delay 100000 -rtbufsize 512k -maxrate 1M -bufsize 1M"
+                )
+            else:
+                # Mode qualité : priorité à la qualité, plus de buffer
+                ffmpeg_source = (
+                    f"ffmpeg:{stream_name}#video=copy#audio=copy"
+                    f"#raw=-fflags +genpts+igndts "
+                    f"-flags low_delay -strict experimental "
+                    f"-avioflags direct "
+                    f"-analyzeduration 2000000 -probesize 2000000 "
+                    f"-timeout 5000000 -reconnect 1 -reconnect_streamed 1 "
+                    f"-reconnect_delay_max 2 -max_reconnect_attempts 3 "
+                    f"-use_wallclock_as_timestamps 1 -avoid_negative_ts make_zero "
+                    f"-max_delay 1000000 -rtbufsize 4M -maxrate 4M -bufsize 8M"
+                )
             
             streams_dict[stream_name] = [
                 hls_url,           # Essayer d'abord l'URL directe

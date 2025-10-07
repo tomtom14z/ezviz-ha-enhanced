@@ -54,3 +54,4 @@ Si rien ne fonctionne, envoyez-moi :
 - [ ] La carte caméra est bien ajoutée avec `camera.oeilcp2`
 - [ ] Home Assistant a bien été redémarré après les modifications
 
+

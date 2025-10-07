@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import EzvizApi, EzvizOpenApi, StreamConverter
-from .const import DOMAIN, CONF_USE_IEUOPEN, CONF_RTSP_PORT, CONF_CAMERAS, CONF_GO2RTC_ADDON_ID
+from .const import DOMAIN, CONF_USE_IEUOPEN, CONF_RTSP_PORT, CONF_CAMERAS, CONF_GO2RTC_ADDON_ID, CONF_STREAM_QUALITY
 from .go2rtc_manager import Go2RtcManager
 
 _LOGGER = logging.getLogger(__name__)
@@ -40,7 +40,8 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
         
         # Initialize go2rtc manager for local RTSP streams
         go2rtc_addon_id = config_data.get(CONF_GO2RTC_ADDON_ID)
-        self.go2rtc_manager = Go2RtcManager(hass, go2rtc_addon_id)
+        stream_quality = config_data.get(CONF_STREAM_QUALITY, "smooth")
+        self.go2rtc_manager = Go2RtcManager(hass, go2rtc_addon_id, stream_quality)
         
         # Store camera data
         self.cameras: Dict[str, Dict[str, Any]] = {}

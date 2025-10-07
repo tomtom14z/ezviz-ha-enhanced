@@ -22,9 +22,11 @@ from .const import (
     CONF_APP_KEY,
     CONF_APP_SECRET,
     CONF_GO2RTC_ADDON_ID,
+    CONF_STREAM_QUALITY,
     DEFAULT_RTSP_PORT,
     DEFAULT_USE_IEUOPEN,
     DEFAULT_GO2RTC_ADDON_ID,
+    DEFAULT_STREAM_QUALITY,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,6 +40,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(CONF_APP_SECRET): str,
         vol.Optional(CONF_RTSP_PORT, default=DEFAULT_RTSP_PORT): int,
         vol.Optional(CONF_GO2RTC_ADDON_ID, default=DEFAULT_GO2RTC_ADDON_ID): str,
+        vol.Optional(CONF_STREAM_QUALITY, default=DEFAULT_STREAM_QUALITY): vol.In(["smooth", "quality"]),
     }
 )
 
@@ -261,6 +264,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 CONF_USE_IEUOPEN, 
                 default=current_config.get(CONF_USE_IEUOPEN, DEFAULT_USE_IEUOPEN)
             ): bool,
+            vol.Optional(
+                CONF_STREAM_QUALITY, 
+                default=current_config.get(CONF_STREAM_QUALITY, DEFAULT_STREAM_QUALITY)
+            ): vol.In(["smooth", "quality"]),
         })
 
         return self.async_show_form(

@@ -16,3 +16,4 @@ echo ""
 echo "OU utilisez ce lien direct :"
 echo "https://github.com/tomtom14z/ezviz-ha-enhanced/releases/new?tag=v2.0.1&title=v2.0.1+-+Support+go2rtc.yaml&body=Support+automatique+de+go2rtc.yaml+et+rechargement+automatique"
 
+
