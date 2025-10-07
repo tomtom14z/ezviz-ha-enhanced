@@ -1,4 +1,4 @@
-# EZVIZ Enhanced v1.0.7
+# EZVIZ Enhanced v2.4.2
 
 ## 🆕 Nouvelles Fonctionnalités
 
