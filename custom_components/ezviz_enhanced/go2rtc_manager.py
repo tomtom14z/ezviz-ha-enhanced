@@ -11,7 +11,7 @@ _LOGGER = logging.getLogger(__name__)
 class Go2RtcManager:
     """Manager for go2rtc streams via configuration file."""
 
-    def __init__(self, hass):
+    def __init__(self, hass, go2rtc_addon_id: str = None):
         """Initialize go2rtc manager."""
         self.hass = hass
         self._streams: Dict[str, str] = {}
@@ -20,6 +20,7 @@ class Go2RtcManager:
         self._go2rtc_config_file = os.path.join(hass.config.config_dir, "go2rtc.yaml")
         self._go2rtc_url = "http://localhost:1984"
         self._keepalive_tasks: Dict[str, asyncio.Task] = {}
+        self._go2rtc_addon_id = go2rtc_addon_id
         
     async def async_add_stream(self, serial: str, hls_url: str) -> Optional[str]:
         """Add a stream to go2rtc configuration and return the RTSP URL."""
@@ -148,45 +149,66 @@ class Go2RtcManager:
 
     async def _reload_go2rtc(self, stream_name: str = None) -> bool:
         """Reload go2rtc configuration via API or service."""
-        # Méthode 1 : Redémarrer l'add-on go2rtc (solution la plus fiable)
-        # Essayer différents IDs d'add-on connus
-        addon_ids = [
-            "a0d7b954_go2rtc",           # Add-on officiel
-            "alexxit_go2rtc",            # Alternative
-            "core_go2rtc",               # Core add-on
-            "local_go2rtc",              # Local
-        ]
+        # Méthode 1 : Utiliser l'ID configuré ou découvrir l'add-on go2rtc automatiquement
+        go2rtc_addon_id = self._go2rtc_addon_id
         
-        for addon_id in addon_ids:
+        if not go2rtc_addon_id:
             try:
-                if self.hass.services.has_service("hassio", "addon_restart"):
-                    _LOGGER.info(f"🔄 Tentative redémarrage add-on go2rtc (ID: {addon_id})...")
-                    await self.hass.services.async_call(
-                        "hassio",
-                        "addon_restart",
-                        {"addon": addon_id},
-                        blocking=False
-                    )
-                    # Attendre que go2rtc redémarre
-                    await asyncio.sleep(3)
+                # Lister les add-ons installés via l'API Supervisor
+                if self.hass.services.has_service("hassio", "addon_info"):
+                    # Chercher parmi les add-ons connus
+                    known_addons = [
+                        "a0d7b954_go2rtc",
+                        "alexxit_go2rtc", 
+                        "core_go2rtc",
+                        "local_go2rtc",
+                    ]
                     
-                    # Vérifier que go2rtc répond
-                    try:
-                        async with aiohttp.ClientSession() as session:
-                            async with session.get(
-                                f"{self._go2rtc_url}/api/streams",
-                                timeout=aiohttp.ClientTimeout(total=2)
-                            ) as response:
-                                if response.status == 200:
-                                    _LOGGER.info(f"✅ Add-on go2rtc redémarré avec succès (ID: {addon_id})")
-                                    return True
-                    except:
-                        pass
-            except Exception as addon_error:
-                _LOGGER.debug(f"Redémarrage add-on {addon_id} échoué: {addon_error}")
-                continue
+                    for addon_id in known_addons:
+                        try:
+                            result = await self.hass.services.async_call(
+                                "hassio",
+                                "addon_info",
+                                {"addon": addon_id},
+                                blocking=True,
+                                return_response=True
+                            )
+                            if result and "data" in result:
+                                go2rtc_addon_id = addon_id
+                                _LOGGER.info(f"✅ Add-on go2rtc détecté : {addon_id}")
+                                break
+                        except:
+                            continue
+            except Exception as e:
+                _LOGGER.debug(f"Détection automatique add-on échouée: {e}")
+        else:
+            _LOGGER.info(f"🔄 Utilisation de l'ID go2rtc configuré : {go2rtc_addon_id}")
         
-        _LOGGER.warning("⚠️ Aucun add-on go2rtc trouvé, tentative reload API...")
+        # Méthode 2 : Redémarrer l'add-on si trouvé
+        if go2rtc_addon_id:
+            try:
+                _LOGGER.info(f"🔄 Redémarrage add-on go2rtc ({go2rtc_addon_id})...")
+                await self.hass.services.async_call(
+                    "hassio",
+                    "addon_restart",
+                    {"addon": go2rtc_addon_id},
+                    blocking=False
+                )
+                await asyncio.sleep(3)
+                
+                # Vérifier que go2rtc répond
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        f"{self._go2rtc_url}/api/streams",
+                        timeout=aiohttp.ClientTimeout(total=2)
+                    ) as response:
+                        if response.status == 200:
+                            _LOGGER.info(f"✅ Add-on go2rtc redémarré avec succès!")
+                            return True
+            except Exception as e:
+                _LOGGER.warning(f"⚠️ Échec redémarrage add-on: {e}")
+        
+        _LOGGER.warning("⚠️ Add-on go2rtc non trouvé, tentative reload API...")
         
         # Méthode 2 : Reload via API (moins fiable mais fonctionne sans add-on)
         try:

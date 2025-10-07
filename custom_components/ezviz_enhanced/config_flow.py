@@ -20,8 +20,10 @@ from .const import (
     CONF_ENABLED,
     CONF_APP_KEY,
     CONF_APP_SECRET,
+    CONF_GO2RTC_ADDON_ID,
     DEFAULT_RTSP_PORT,
     DEFAULT_USE_IEUOPEN,
+    DEFAULT_GO2RTC_ADDON_ID,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -34,6 +36,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(CONF_APP_KEY): str,
         vol.Optional(CONF_APP_SECRET): str,
         vol.Optional(CONF_RTSP_PORT, default=DEFAULT_RTSP_PORT): int,
+        vol.Optional(CONF_GO2RTC_ADDON_ID, default=DEFAULT_GO2RTC_ADDON_ID): str,
     }
 )
 
