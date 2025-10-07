@@ -9,6 +9,6 @@
     "requests>=2.25.0"
   ],
   "config_flow": true,
-  "version": "2.4.2",
+  "version": "2.4.3",
   "iot_class": "cloud_polling"
 }
