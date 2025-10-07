@@ -11,7 +11,7 @@ _LOGGER = logging.getLogger(__name__)
 class Go2RtcManager:
     """Manager for go2rtc streams via configuration file."""
 
-    def __init__(self, hass, go2rtc_addon_id: str = None, stream_quality: str = "smooth"):
+    def __init__(self, hass, go2rtc_addon_id: str = None, stream_quality: str = "cpu_optimized"):
         """Initialize go2rtc manager."""
         self.hass = hass
         self._streams: Dict[str, str] = {}
@@ -107,7 +107,22 @@ class Go2RtcManager:
                 old_url = old_url[0]
             
             # Configuration go2rtc optimisée selon le mode choisi
-            if self._stream_quality == "smooth":
+            if self._stream_quality == "cpu_optimized":
+                # Mode CPU optimisé : priorité à la réduction de charge CPU
+                ffmpeg_source = (
+                    f"ffmpeg:{stream_name}#video=copy#audio=copy"
+                    f"#raw=-threads 1 -thread_type slice "
+                    f"-fflags +nobuffer+fastseek+flush_packets "
+                    f"-flags low_delay -strict experimental "
+                    f"-avioflags direct -fflags +genpts+igndts "
+                    f"-analyzeduration 200000 -probesize 200000 "
+                    f"-timeout 10000000 -reconnect 1 -reconnect_streamed 1 "
+                    f"-reconnect_delay_max 3 -max_reconnect_attempts 1 "
+                    f"-use_wallclock_as_timestamps 1 -avoid_negative_ts make_zero "
+                    f"-max_delay 200000 -rtbufsize 256k -maxrate 512k -bufsize 512k "
+                    f"-preset ultrafast -tune zerolatency"
+                )
+            elif self._stream_quality == "smooth":
                 # Mode fluide : priorité à la fluidité, moins de buffer
                 ffmpeg_source = (
                     f"ffmpeg:{stream_name}#video=copy#audio=copy"

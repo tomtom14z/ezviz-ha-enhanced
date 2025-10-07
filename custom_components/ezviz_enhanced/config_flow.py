@@ -40,7 +40,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(CONF_APP_SECRET): str,
         vol.Optional(CONF_RTSP_PORT, default=DEFAULT_RTSP_PORT): int,
         vol.Optional(CONF_GO2RTC_ADDON_ID, default=DEFAULT_GO2RTC_ADDON_ID): str,
-        vol.Optional(CONF_STREAM_QUALITY, default=DEFAULT_STREAM_QUALITY): vol.In(["smooth", "quality"]),
+        vol.Optional(CONF_STREAM_QUALITY, default=DEFAULT_STREAM_QUALITY): vol.In(["smooth", "quality", "cpu_optimized"]),
     }
 )
 
@@ -267,7 +267,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             vol.Optional(
                 CONF_STREAM_QUALITY, 
                 default=current_config.get(CONF_STREAM_QUALITY, DEFAULT_STREAM_QUALITY)
-            ): vol.In(["smooth", "quality"]),
+            ): vol.In(["smooth", "quality", "cpu_optimized"]),
         })
 
         return self.async_show_form(

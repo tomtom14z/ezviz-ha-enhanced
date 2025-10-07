@@ -22,7 +22,7 @@ CONF_STREAM_QUALITY = "stream_quality"
 DEFAULT_RTSP_PORT = 8554
 DEFAULT_USE_IEUOPEN = True
 DEFAULT_GO2RTC_ADDON_ID = "a889bffc_go2rtc"
-DEFAULT_STREAM_QUALITY = "smooth"  # "smooth" ou "quality"
+DEFAULT_STREAM_QUALITY = "cpu_optimized"  # "smooth", "quality" ou "cpu_optimized"
 
 # EZVIZ Open Platform API endpoints (IeuOpen)
 EZVIZ_OPEN_BASE_URL = "https://open.ezvizlife.com"

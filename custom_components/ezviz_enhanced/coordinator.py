@@ -40,7 +40,7 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
         
         # Initialize go2rtc manager for local RTSP streams
         go2rtc_addon_id = config_data.get(CONF_GO2RTC_ADDON_ID)
-        stream_quality = config_data.get(CONF_STREAM_QUALITY, "smooth")
+        stream_quality = config_data.get(CONF_STREAM_QUALITY, "cpu_optimized")
         self.go2rtc_manager = Go2RtcManager(hass, go2rtc_addon_id, stream_quality)
         
         # Store camera data
