@@ -75,6 +75,14 @@ class Go2RtcManager:
                     'webrtc': '-c:v libvpx -deadline realtime -cpu-used 4 -b:v 1M -maxrate 1M -bufsize 2M'
                 }
             
+            # Configuration HLS optimisée pour CPU
+            if 'hls' not in config:
+                config['hls'] = {
+                    'listen': ':8555',
+                    'timeout': '10s',
+                    'keepalive': '30s'
+                }
+            
             if 'rtsp' not in config:
                 config['rtsp'] = {
                     'listen': ':8554',
@@ -149,10 +157,17 @@ class Go2RtcManager:
                     f"-max_delay 1000000 -rtbufsize 4M -maxrate 4M -bufsize 8M"
                 )
             
-            streams_dict[stream_name] = [
-                hls_url,           # Essayer d'abord l'URL directe
-                ffmpeg_source      # Fallback avec FFmpeg si l'URL directe ne marche pas
-            ]
+            # Configuration optimisée : HLS direct en priorité (moins énergivore)
+            if self._stream_quality == "cpu_optimized":
+                # Mode CPU optimisé : HLS direct uniquement, pas de conversion FFmpeg
+                streams_dict[stream_name] = hls_url
+                _LOGGER.info(f"🔋 Mode CPU optimisé : HLS direct uniquement pour {serial}")
+            else:
+                # Autres modes : HLS + fallback FFmpeg
+                streams_dict[stream_name] = [
+                    hls_url,           # Essayer d'abord l'URL HLS directe
+                    ffmpeg_source      # Fallback avec FFmpeg si l'URL directe ne marche pas
+                ]
             
             # Écrire la configuration mise à jour
             def write_yaml():
@@ -172,7 +187,10 @@ class Go2RtcManager:
                 _LOGGER.info(f"📍 Stream: {stream_name}")
                 _LOGGER.info(f"🔗 URL RTSP: {rtsp_url}")
                 _LOGGER.info(f"📁 Fichier: {config_file_to_use}")
-                _LOGGER.info(f"🎬 Sources: URL directe HLS + FFmpeg (reconnexion automatique)")
+                if self._stream_quality == "cpu_optimized":
+                    _LOGGER.info(f"🎬 Sources: HLS direct uniquement (mode CPU optimisé)")
+                else:
+                    _LOGGER.info(f"🎬 Sources: URL directe HLS + FFmpeg (reconnexion automatique)")
                 _LOGGER.info("")
                 
                 if reload_success:
